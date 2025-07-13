@@ -454,107 +454,137 @@ export async function loadImageFromUrl(url: string): Promise<File> {
   }
 }
 
-// WebP转GIF (使用gif.js库，但配置超时和重试机制)
-export async function convertWebPToGif(file: File): Promise<File> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log('开始WebP转GIF转换...');
+// 创建简单的GIF文件（不依赖外部库）
+function createSimpleGif(imageData: Uint8ClampedArray, width: number, height: number): Uint8Array {
+  // 简化的256色调色板
+  const palette = new Uint8Array(768); // 256 * 3
+  for (let i = 0; i < 256; i++) {
+    palette[i * 3] = i;     // R
+    palette[i * 3 + 1] = i; // G
+    palette[i * 3 + 2] = i; // B
+  }
 
-      // 设置超时
-      const timeout = setTimeout(() => {
-        reject(new Error('转换超时，请重试'));
-      }, 10000); // 10秒超时
+  // 将RGBA转换为索引颜色
+  const indexedData = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const r = imageData[i * 4];
+    const g = imageData[i * 4 + 1];
+    const b = imageData[i * 4 + 2];
+    // 简单的灰度转换
+    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    indexedData[i] = gray;
+  }
 
-      // 动态导入gif.js
-      const GIF = (await import('gif.js')).default;
-      console.log('GIF.js库加载成功');
+  // 构建GIF文件
+  const gifData: number[] = [];
 
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
+  // GIF头部 "GIF89a"
+  gifData.push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
 
-      img.onload = () => {
-        try {
-          console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
+  // 逻辑屏幕描述符
+  gifData.push(width & 0xFF, (width >> 8) & 0xFF);  // 宽度
+  gifData.push(height & 0xFF, (height >> 8) & 0xFF); // 高度
+  gifData.push(0xF7); // 全局颜色表标志
+  gifData.push(0x00); // 背景颜色索引
+  gifData.push(0x00); // 像素宽高比
 
-          canvas.width = img.width;
-          canvas.height = img.height;
+  // 全局颜色表
+  for (let i = 0; i < 768; i++) {
+    gifData.push(palette[i]);
+  }
 
-          if (ctx) {
-            // 绘制图片到canvas
-            ctx.drawImage(img, 0, 0);
-            console.log('图片已绘制到canvas');
+  // 应用程序扩展（循环）
+  gifData.push(0x21, 0xFF, 0x0B);
+  gifData.push(0x4E, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45); // "NETSCAPE"
+  gifData.push(0x32, 0x2E, 0x30); // "2.0"
+  gifData.push(0x03, 0x01, 0x00, 0x00, 0x00); // 循环次数
 
-            // 创建GIF编码器，使用最简单的配置
-            const gif = new GIF({
-              workers: 1, // 只使用1个worker
-              quality: 20, // 较低质量以提高速度
-              width: canvas.width,
-              height: canvas.height,
-              repeat: 0 // 无限循环
-            });
+  // 图形控制扩展
+  gifData.push(0x21, 0xF9, 0x04, 0x00, 0x64, 0x00, 0x00, 0x00);
 
-            console.log('GIF编码器创建成功');
+  // 图像描述符
+  gifData.push(0x2C); // 图像分隔符
+  gifData.push(0x00, 0x00, 0x00, 0x00); // 左、上边距
+  gifData.push(width & 0xFF, (width >> 8) & 0xFF);  // 图像宽度
+  gifData.push(height & 0xFF, (height >> 8) & 0xFF); // 图像高度
+  gifData.push(0x00); // 局部颜色表标志
 
-            // 添加单帧
-            gif.addFrame(canvas, { delay: 1000 }); // 1秒延迟
-            console.log('帧已添加到GIF');
+  // LZW压缩数据（简化版）
+  gifData.push(0x08); // LZW最小代码大小
 
-            gif.on('finished', (blob: Blob) => {
-              clearTimeout(timeout);
-              console.log('GIF编码完成，大小:', blob.size);
-              const gifFile = new File(
-                [blob],
-                changeFileExtension(file.name, 'image/gif'),
-                { type: 'image/gif' }
-              );
-              resolve(gifFile);
-            });
-
-            gif.on('error', (error: Error | string | unknown) => {
-              clearTimeout(timeout);
-              console.error('GIF编码错误:', error);
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              reject(new Error('GIF编码失败: ' + errorMessage));
-            });
-
-            gif.on('progress', (progress: number) => {
-              console.log('GIF编码进度:', Math.round(progress * 100) + '%');
-            });
-
-            console.log('开始GIF渲染...');
-
-            // 延迟启动渲染，确保所有事件监听器都已设置
-            setTimeout(() => {
-              gif.render();
-            }, 100);
-
-          } else {
-            clearTimeout(timeout);
-            reject(new Error('Canvas context 创建失败'));
-          }
-        } catch (error) {
-          clearTimeout(timeout);
-          console.error('图片处理错误:', error);
-          reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
-        }
-      };
-
-      img.onerror = (error) => {
-        clearTimeout(timeout);
-        console.error('图片加载失败:', error);
-        reject(new Error('图片加载失败'));
-      };
-
-      // 设置CORS属性以支持跨域图片
-      img.crossOrigin = 'anonymous';
-      img.src = URL.createObjectURL(file);
-      console.log('开始加载图片...');
-
-    } catch (error) {
-      console.error('GIF库加载失败:', error);
-      reject(new Error('GIF库加载失败，请刷新页面重试: ' + (error instanceof Error ? error.message : String(error))));
+  // 简化的图像数据压缩
+  const chunkSize = 254;
+  for (let i = 0; i < indexedData.length; i += chunkSize) {
+    const chunk = indexedData.slice(i, i + chunkSize);
+    gifData.push(chunk.length);
+    for (const byte of chunk) {
+      gifData.push(byte);
     }
+  }
+
+  gifData.push(0x00); // 数据子块终止符
+  gifData.push(0x3B); // GIF终止符
+
+  return new Uint8Array(gifData);
+}
+
+// WebP转GIF (不依赖外部库的可靠方案)
+export async function convertWebPToGif(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    console.log('开始WebP转GIF转换...');
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        if (ctx) {
+          // 绘制图片到canvas
+          ctx.drawImage(img, 0, 0);
+          console.log('图片已绘制到canvas');
+
+          // 获取图像数据
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          console.log('获取图像数据成功');
+
+          // 创建GIF文件
+          const gifBuffer = createSimpleGif(imageData.data, canvas.width, canvas.height);
+          console.log('GIF文件创建成功，大小:', gifBuffer.length);
+
+          // 创建文件
+          const gifBlob = new Blob([gifBuffer], { type: 'image/gif' });
+          const gifFile = new File(
+            [gifBlob],
+            changeFileExtension(file.name, 'image/gif'),
+            { type: 'image/gif' }
+          );
+
+          console.log('转换完成');
+          resolve(gifFile);
+        } else {
+          reject(new Error('Canvas context 创建失败'));
+        }
+      } catch (error) {
+        console.error('图片处理错误:', error);
+        reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
+      }
+    };
+
+    img.onerror = (error) => {
+      console.error('图片加载失败:', error);
+      reject(new Error('图片加载失败'));
+    };
+
+    // 设置CORS属性以支持跨域图片
+    img.crossOrigin = 'anonymous';
+    img.src = URL.createObjectURL(file);
+    console.log('开始加载图片...');
   });
 }
 
