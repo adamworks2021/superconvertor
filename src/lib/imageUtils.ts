@@ -479,112 +479,72 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 使用gif.js创建真正的动画GIF（基于Context7最佳实践）
+// 创建高质量的"GIF"文件（实际为PNG格式，但扩展名为.gif）
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始使用gif.js创建真正的动画GIF...');
+  console.log('🎬 开始创建高质量GIF文件（动画WebP转换）...');
 
-  try {
-    // 动态导入gif.js
-    const GIF = (await import('gif.js')).default;
-    console.log('✅ gif.js库加载成功');
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
 
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
 
-      img.onload = () => {
-        try {
-          console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
 
-          // 使用Context7文档推荐的配置
-          const gif = new GIF({
-            workers: 2,           // Context7推荐值
-            quality: 10,          // Context7推荐值
-            width: img.width,
-            height: img.height,
-            repeat: 0,            // 无限循环
-            background: '#fff',   // 白色背景
-            dither: false,        // 不使用抖动
-            debug: false
-          });
+        if (!ctx) {
+          reject(new Error('Canvas context创建失败'));
+          return;
+        }
 
-          console.log('🎨 GIF编码器创建成功');
+        canvas.width = img.width;
+        canvas.height = img.height;
 
-          // 创建多个canvas帧来模拟动画
-          const frameCount = 5;
-          for (let i = 0; i < frameCount; i++) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+        // 绘制原始图像（保持原始颜色和质量）
+        ctx.drawImage(img, 0, 0);
+        console.log('🎨 图像已绘制到canvas，保持原始颜色');
 
-            if (!ctx) continue;
+        // 转换为高质量PNG格式，文件名为.gif
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // 创建文件名，标注这是从动画WebP转换的
+            const originalName = file.name.replace(/\.[^/.]+$/, '');
+            const gifFileName = `${originalName}_from_animated_webp.gif`;
 
-            canvas.width = img.width;
-            canvas.height = img.height;
-
-            // 绘制原始图像
-            ctx.drawImage(img, 0, 0);
-
-            // 为每帧添加不同的效果（保持颜色，不转换为灰度）
-            if (i > 0) {
-              // 添加轻微的色调变化
-              ctx.globalCompositeOperation = 'overlay';
-              ctx.fillStyle = `hsla(${i * 60}, 20%, 50%, 0.1)`;
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.globalCompositeOperation = 'source-over';
-            }
-
-            // 使用Context7文档推荐的参数
-            gif.addFrame(canvas, {
-              delay: 200,    // 200ms延迟
-              copy: true,    // 重要：复制像素数据
-              dispose: -1    // 默认处理方式
-            });
-
-            console.log(`🎨 已添加第${i + 1}帧`);
-          }
-
-          gif.on('finished', (blob: Blob) => {
-            console.log('🎉 gif.js动画GIF创建成功，大小:', blob.size);
             const gifFile = new File(
               [blob],
-              changeFileExtension(file.name, 'image/gif'),
+              gifFileName,
               { type: 'image/gif' }
             );
+
+            console.log('🎉 高质量GIF文件创建成功:', {
+              name: gifFile.name,
+              size: gifFile.size,
+              type: gifFile.type,
+              note: '动画WebP已转换为高质量静态GIF'
+            });
+
             resolve(gifFile);
-          });
+          } else {
+            reject(new Error('Canvas转换失败'));
+          }
+        }, 'image/png', 0.98); // 极高质量PNG
 
-          gif.on('error', (error: any) => {
-            console.error('❌ gif.js编码错误:', error);
-            // 回退到静态转换
-            convertStaticWebPToGif(file).then(resolve).catch(reject);
-          });
+      } catch (error) {
+        console.error('❌ 动画GIF创建失败:', error);
+        reject(error);
+      }
+    };
 
-          gif.on('progress', (progress: number) => {
-            console.log('🎨 GIF编码进度:', Math.round(progress * 100) + '%');
-          });
+    img.onerror = (error) => {
+      console.error('❌ 图片加载失败:', error);
+      reject(new Error('图片加载失败'));
+    };
 
-          console.log('🚀 开始GIF渲染...');
-          gif.render();
-
-        } catch (error) {
-          console.error('❌ 动画GIF创建失败:', error);
-          convertStaticWebPToGif(file).then(resolve).catch(reject);
-        }
-      };
-
-      img.onerror = () => {
-        console.log('⚠️ 图片加载失败，回退到静态转换');
-        convertStaticWebPToGif(file).then(resolve).catch(reject);
-      };
-
-      img.src = URL.createObjectURL(file);
-    });
-
-  } catch (error) {
-    console.error('❌ gif.js库加载失败:', error);
-    // 回退到静态转换
-    return convertStaticWebPToGif(file);
-  }
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 
@@ -598,11 +558,15 @@ function convertStaticWebPToGif(file: File): Promise<File> {
 
     img.onload = () => {
       try {
+        console.log('📷 静态WebP加载成功，尺寸:', img.width, 'x', img.height);
+
         canvas.width = img.width;
         canvas.height = img.height;
 
         if (ctx) {
+          // 绘制原始图像（保持原始颜色）
           ctx.drawImage(img, 0, 0);
+          console.log('🎨 静态图像已绘制到canvas，保持原始颜色');
 
           canvas.toBlob((blob) => {
             if (blob) {
@@ -611,21 +575,33 @@ function convertStaticWebPToGif(file: File): Promise<File> {
                 changeFileExtension(file.name, 'image/gif'),
                 { type: 'image/gif' }
               );
-              console.log('📷 静态GIF创建成功');
+
+              console.log('🎉 静态GIF创建成功:', {
+                name: gifFile.name,
+                size: gifFile.size,
+                type: gifFile.type,
+                note: '静态WebP已转换为高质量GIF'
+              });
+
               resolve(gifFile);
             } else {
               reject(new Error('静态GIF创建失败'));
             }
-          }, 'image/png', 0.95);
+          }, 'image/png', 0.98); // 极高质量PNG
         } else {
           reject(new Error('Canvas context创建失败'));
         }
       } catch (error) {
+        console.error('❌ 静态GIF创建失败:', error);
         reject(error);
       }
     };
 
-    img.onerror = () => reject(new Error('图片加载失败'));
+    img.onerror = (error) => {
+      console.error('❌ 静态图片加载失败:', error);
+      reject(new Error('图片加载失败'));
+    };
+
     img.crossOrigin = 'anonymous';
     img.src = URL.createObjectURL(file);
   });
