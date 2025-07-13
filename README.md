@@ -2,6 +2,14 @@
 
 一个功能强大的在线图片处理工具，支持格式转换、压缩优化和社交平台尺寸剪裁。
 
+## 👨‍💻 作者信息
+
+**原作者**: adamworks78
+**微信**: adamworks78
+**GitHub**: [adamworks2021](https://github.com/adamworks2021)
+
+> 如需二次开发或商业使用，请保留原作者信息并注明出处。感谢您的支持！
+
 ## ✨ 主要功能
 
 ### 🔄 图片格式转换
@@ -99,8 +107,8 @@ src/
 - **保持EXIF**: 是/否
 
 ### 支持格式
-- **输入**: JPG, PNG, WebP, GIF, BMP, TIFF
-- **输出**: JPG, PNG, WebP
+- **输入**: JPG, PNG, WebP, GIF, BMP, TIFF, AVIF, SVG, ICO, HEIC/HEIF
+- **输出**: JPG, PNG, WebP, GIF, BMP, TIFF, AVIF
 
 ## 🌟 特色功能
 
@@ -122,9 +130,24 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 ## 📞 联系方式
 
 如有问题或建议，请通过以下方式联系：
-- GitHub Issues
-- Email: your-email@example.com
+- **GitHub Issues**: [提交问题](https://github.com/adamworks2021/superconvertor/issues)
+- **微信**: adamworks78
+- **作者GitHub**: [adamworks2021](https://github.com/adamworks2021)
+
+## ⚖️ 开源协议
+
+本项目采用 MIT 协议开源，允许自由使用、修改和分发。
+
+**二次开发要求**：
+- 保留原作者信息（adamworks78）
+- 在衍生项目中注明原项目来源
+- 遵循 MIT 协议的其他条款
+
+## 🙏 致谢
+
+感谢所有为这个项目贡献代码、提出建议和报告问题的开发者们！
 
 ---
 
 **SuperConvertor** - 让图片处理变得简单高效！
+*Created with ❤️ by adamworks78*

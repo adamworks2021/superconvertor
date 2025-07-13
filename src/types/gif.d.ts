@@ -5,6 +5,8 @@ declare module 'gif.js' {
     width?: number;
     height?: number;
     workerScript?: string;
+    repeat?: number;
+    transparent?: string | null;
   }
 
   class GIF {

@@ -177,6 +177,33 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* 版权信息 */}
+      <footer className="mt-12 py-8 border-t border-gray-200 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              © 2024 SuperConvertor - 专业图片处理工具
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Created with ❤️ by{' '}
+              <span className="font-medium text-gray-700">adamworks78</span>
+              {' '}| 微信: adamworks78
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              开源项目，遵循 MIT 协议 |{' '}
+              <a
+                href="https://github.com/adamworks2021/superconvertor"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800"
+              >
+                GitHub
+              </a>
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
