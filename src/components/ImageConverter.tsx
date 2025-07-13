@@ -41,6 +41,10 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
         setConversionStatus('正在转换WebP为GIF...');
         setConversionProgress(25);
 
+        // 添加延迟以显示进度
+        await new Promise(resolve => setTimeout(resolve, 200));
+        setConversionProgress(50);
+
         converted = await convertWebPToGif(selectedImage.file);
 
         setConversionProgress(75);
@@ -48,6 +52,10 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
       } else {
         setConversionStatus('正在转换格式...');
         setConversionProgress(25);
+
+        // 添加延迟以显示进度
+        await new Promise(resolve => setTimeout(resolve, 200));
+        setConversionProgress(50);
 
         converted = await convertImageFormat(selectedImage.file, targetFormat, quality);
 
