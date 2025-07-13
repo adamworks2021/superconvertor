@@ -535,6 +535,60 @@ async function createAnimatedGif(file: File): Promise<File> {
   });
 }
 
+// 简化的LZW编码器
+function encodeLZW(data: number[], minCodeSize: number): number[] {
+  const clearCode = 1 << minCodeSize;
+  const endCode = clearCode + 1;
+  let nextCode = endCode + 1;
+  let codeSize = minCodeSize + 1;
+
+  const output: number[] = [];
+  let bitBuffer = 0;
+  let bitCount = 0;
+
+  function writeBits(code: number, bits: number) {
+    bitBuffer |= (code << bitCount);
+    bitCount += bits;
+
+    while (bitCount >= 8) {
+      output.push(bitBuffer & 0xFF);
+      bitBuffer >>= 8;
+      bitCount -= 8;
+    }
+  }
+
+  // 写入清除码
+  writeBits(clearCode, codeSize);
+
+  // 写入数据
+  for (const byte of data) {
+    writeBits(byte, codeSize);
+
+    // 简单的代码大小管理
+    if (nextCode >= (1 << codeSize) && codeSize < 12) {
+      codeSize++;
+    }
+    nextCode++;
+
+    // 重置字典
+    if (nextCode >= 4096) {
+      writeBits(clearCode, codeSize);
+      nextCode = endCode + 1;
+      codeSize = minCodeSize + 1;
+    }
+  }
+
+  // 写入结束码
+  writeBits(endCode, codeSize);
+
+  // 清空缓冲区
+  if (bitCount > 0) {
+    output.push(bitBuffer & 0xFF);
+  }
+
+  return output;
+}
+
 // 创建简单的动画GIF文件
 function createSimpleAnimatedGif(imageData: ImageData, width: number, height: number): Uint8Array {
   const gifData: number[] = [];
@@ -559,11 +613,11 @@ function createSimpleAnimatedGif(imageData: ImageData, width: number, height: nu
   gifData.push(0x03, 0x01, 0x00, 0x00, 0x00); // 无限循环
 
   // 创建多帧动画
-  const frameCount = 5;
+  const frameCount = 3; // 减少到3帧以简化
   for (let frame = 0; frame < frameCount; frame++) {
     // 图形控制扩展
     gifData.push(0x21, 0xF9, 0x04, 0x00);
-    gifData.push(0x32, 0x00); // 延迟时间 (50/100秒 = 0.5秒)
+    gifData.push(0x64, 0x00); // 延迟时间 (100/100秒 = 1秒)
     gifData.push(0x00, 0x00); // 透明色索引、块终止符
 
     // 图像描述符
@@ -572,8 +626,9 @@ function createSimpleAnimatedGif(imageData: ImageData, width: number, height: nu
     gifData.push(height & 0xFF, (height >> 8) & 0xFF);
     gifData.push(0x00); // 局部颜色表标志
 
-    // 图像数据（简化的LZW压缩）
-    gifData.push(0x08); // LZW最小代码大小
+    // 图像数据（正确的LZW压缩）
+    const minCodeSize = 8;
+    gifData.push(minCodeSize); // LZW最小代码大小
 
     // 为每帧创建稍微不同的数据
     const frameData: number[] = [];
@@ -583,14 +638,17 @@ function createSimpleAnimatedGif(imageData: ImageData, width: number, height: nu
       const b = imageData.data[i + 2];
       // 转换为灰度，并为每帧添加轻微变化
       let gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-      gray = Math.min(255, Math.max(0, gray + (frame * 5))); // 每帧稍微变亮
+      gray = Math.min(255, Math.max(0, gray + (frame * 10))); // 每帧变化更明显
       frameData.push(gray);
     }
 
-    // 简单的数据块编码
+    // 使用正确的LZW编码
+    const compressedData = encodeLZW(frameData, minCodeSize);
+
+    // 将压缩数据分成子块
     const chunkSize = 254;
-    for (let i = 0; i < frameData.length; i += chunkSize) {
-      const chunk = frameData.slice(i, i + chunkSize);
+    for (let i = 0; i < compressedData.length; i += chunkSize) {
+      const chunk = compressedData.slice(i, i + chunkSize);
       if (chunk.length > 0) {
         gifData.push(chunk.length);
         gifData.push(...chunk);
