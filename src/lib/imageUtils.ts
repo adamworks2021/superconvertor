@@ -479,86 +479,161 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 诚实的解决方案：浏览器中的动画WebP转动画GIF技术限制说明
+// 动态加载WebPXMux库（通过CDN）
+async function loadWebPXMux(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    // 检查是否已经加载
+    if ((window as any).WebPXMux) {
+      resolve((window as any).WebPXMux);
+      return;
+    }
+
+    // 动态加载WebPXMux脚本
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.min.js';
+    script.onload = () => {
+      if ((window as any).WebPXMux) {
+        resolve((window as any).WebPXMux);
+      } else {
+        reject(new Error('WebPXMux加载失败'));
+      }
+    };
+    script.onerror = () => reject(new Error('WebPXMux脚本加载失败'));
+    document.head.appendChild(script);
+  });
+}
+
+// 使用 WebPXMux + gif.js 实现真正的动画WebP转动画GIF
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始处理动画WebP转换...');
+  console.log('🎬 开始使用WebPXMux解码动画WebP...');
 
-  // 检查是否为动画WebP
-  const isAnimated = await checkIfAnimatedWebP(file);
+  try {
+    // 动态加载所需库
+    const [WebPXMux, GIF] = await Promise.all([
+      loadWebPXMux(),
+      import('gif.js').then(m => m.default)
+    ]);
 
-  if (isAnimated) {
-    console.log('🎬 检测到动画WebP文件');
-    console.log('⚠️ 技术说明：在浏览器中实现真正的动画WebP转动画GIF存在技术限制');
-    console.log('💡 建议：使用服务器端工具（如CloudConvert、FFmpeg）进行专业转换');
+    console.log('✅ WebPXMux和gif.js库加载成功');
 
-    // 提供一个带有说明的高质量静态GIF
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
+    return new Promise(async (resolve, reject) => {
+      try {
+        // 初始化WebPXMux解码器
+        const xMux = new WebPXMux('https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.wasm');
+        console.log('🔧 WebPXMux解码器创建成功，等待WASM加载...');
 
-      img.onload = () => {
-        try {
-          console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
+        await xMux.ready;
+        console.log('✅ WASM加载完成');
 
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
+        // 读取WebP文件
+        const buf = await file.arrayBuffer();
+        console.log('📁 WebP文件读取成功，大小:', buf.byteLength);
 
-          if (!ctx) {
-            reject(new Error('Canvas context创建失败'));
-            return;
-          }
+        // 解码动画WebP
+        console.log('🎬 开始解码动画WebP...');
+        const anim = xMux.decode(buf);
 
-          canvas.width = img.width;
-          canvas.height = img.height;
-
-          // 绘制第一帧（浏览器只能显示第一帧）
-          ctx.drawImage(img, 0, 0);
-          console.log('🎨 已提取动画WebP的第一帧');
-
-          canvas.toBlob((blob) => {
-            if (blob) {
-              // 在文件名中标注这是从动画WebP提取的第一帧
-              const originalName = file.name.replace(/\.[^/.]+$/, '');
-              const gifFileName = `${originalName}_first_frame_from_animated_webp.gif`;
-
-              const gifFile = new File(
-                [blob],
-                gifFileName,
-                { type: 'image/gif' }
-              );
-
-              console.log('🎉 动画WebP第一帧转换完成:', {
-                name: gifFile.name,
-                size: gifFile.size,
-                note: '浏览器限制：只能提取第一帧'
-              });
-
-              console.log('💡 如需真正的动画GIF，请使用：');
-              console.log('   • CloudConvert (https://cloudconvert.com/webp-to-gif)');
-              console.log('   • 本地FFmpeg工具');
-              console.log('   • 其他专业转换服务');
-
-              resolve(gifFile);
-            } else {
-              reject(new Error('Canvas转换失败'));
-            }
-          }, 'image/png', 0.98);
-
-        } catch (error) {
-          console.error('❌ 动画WebP处理失败:', error);
-          reject(error);
+        if (!anim.frames || anim.frames.length === 0) {
+          console.log('⚠️ 不是动画WebP，回退到静态转换');
+          return convertStaticWebPToGif(file).then(resolve).catch(reject);
         }
-      };
 
-      img.onerror = (error) => {
-        console.error('❌ 动画WebP加载失败:', error);
-        reject(new Error('图片加载失败'));
-      };
+        console.log('🎉 动画WebP解码成功!', {
+          width: anim.width,
+          height: anim.height,
+          frames: anim.frames.length,
+          loops: anim.loops
+        });
 
-      img.src = URL.createObjectURL(file);
+        // 创建GIF编码器
+        const gif = new GIF({
+          workers: 2,
+          quality: 10,
+          workerScript: '/gif.worker.js',
+          width: anim.width,
+          height: anim.height,
+          repeat: anim.loops === 0 ? 0 : anim.loops, // 0 = 无限循环
+          background: '#ffffff',
+          transparent: null
+        });
+
+        console.log('🎨 GIF编码器创建成功');
+
+        // 创建canvas用于帧处理
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          throw new Error('Canvas context创建失败');
+        }
+
+        canvas.width = anim.width;
+        canvas.height = anim.height;
+
+        // 逐帧处理并添加到GIF
+        console.log(`🎬 开始处理${anim.frames.length}帧...`);
+
+        for (let i = 0; i < anim.frames.length; i++) {
+          const frame = anim.frames[i];
+
+          // 清除canvas
+          ctx.clearRect(0, 0, anim.width, anim.height);
+
+          // 填充白色背景（处理透明度）
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, anim.width, anim.height);
+
+          // 绘制当前帧
+          ctx.putImageData(frame.patch, frame.x, frame.y);
+
+          // 添加帧到GIF
+          gif.addFrame(canvas, {
+            copy: true,
+            delay: frame.duration || 100 // 默认100ms延迟
+          });
+
+          console.log(`🎨 已处理第${i + 1}/${anim.frames.length}帧 (延迟: ${frame.duration}ms)`);
+        }
+
+        // 设置GIF事件监听
+        gif.on('finished', (blob: Blob) => {
+          console.log('🎉 真正的动画GIF创建成功!', {
+            size: blob.size,
+            frames: anim.frames.length,
+            loops: anim.loops,
+            note: '使用WebPXMux + gif.js专业转换'
+          });
+
+          const gifFile = new File(
+            [blob],
+            changeFileExtension(file.name, 'image/gif'),
+            { type: 'image/gif' }
+          );
+
+          resolve(gifFile);
+        });
+
+        gif.on('error', (error: any) => {
+          console.error('❌ GIF编码错误:', error);
+          convertStaticWebPToGif(file).then(resolve).catch(reject);
+        });
+
+        gif.on('progress', (progress: number) => {
+          console.log('🎨 GIF编码进度:', Math.round(progress * 100) + '%');
+        });
+
+        console.log('🚀 开始GIF编码...');
+        gif.render();
+
+      } catch (error) {
+        console.error('❌ 动画WebP处理失败:', error);
+        convertStaticWebPToGif(file).then(resolve).catch(reject);
+      }
     });
-  } else {
-    console.log('📷 检测到静态WebP，进行标准转换');
+
+  } catch (error) {
+    console.error('❌ 库加载失败:', error);
+    console.log('⚠️ 回退到静态转换');
     return convertStaticWebPToGif(file);
   }
 }
