@@ -509,13 +509,53 @@ function createSimpleGif(imageData: Uint8ClampedArray, width: number, height: nu
   gifData.push(height & 0xFF, (height >> 8) & 0xFF); // 图像高度
   gifData.push(0x00); // 局部颜色表标志
 
-  // LZW压缩数据（简化版）
+  // LZW压缩数据（修复版）
   gifData.push(0x08); // LZW最小代码大小
 
-  // 简化的图像数据压缩
+  // 简单但有效的图像数据编码
+  // 使用未压缩的数据格式
+  const clearCode = 256;
+  const endCode = 257;
+
+  // 创建简单的LZW数据流
+  const lzwData: number[] = [];
+
+  // 添加清除码
+  lzwData.push(clearCode);
+
+  // 添加图像数据（每个像素作为一个代码）
+  for (let i = 0; i < indexedData.length; i++) {
+    lzwData.push(indexedData[i]);
+  }
+
+  // 添加结束码
+  lzwData.push(endCode);
+
+  // 将代码打包成字节（9位代码打包成字节）
+  let bitBuffer = 0;
+  let bitCount = 0;
+  const packedData: number[] = [];
+
+  for (const code of lzwData) {
+    bitBuffer |= (code << bitCount);
+    bitCount += 9;
+
+    while (bitCount >= 8) {
+      packedData.push(bitBuffer & 0xFF);
+      bitBuffer >>= 8;
+      bitCount -= 8;
+    }
+  }
+
+  // 处理剩余的位
+  if (bitCount > 0) {
+    packedData.push(bitBuffer & 0xFF);
+  }
+
+  // 将数据分成子块
   const chunkSize = 254;
-  for (let i = 0; i < indexedData.length; i += chunkSize) {
-    const chunk = indexedData.slice(i, i + chunkSize);
+  for (let i = 0; i < packedData.length; i += chunkSize) {
+    const chunk = packedData.slice(i, i + chunkSize);
     gifData.push(chunk.length);
     for (const byte of chunk) {
       gifData.push(byte);

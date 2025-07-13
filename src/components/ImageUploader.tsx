@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { Upload, Image as ImageIcon, FileImage } from 'lucide-react';
 import { ImageFile } from '@/types';
 import { getImageInfo, validateImageFile } from '@/lib/imageUtils';
+import ImagePasteArea from './ImagePasteArea';
 
 interface ImageUploaderProps {
   onImagesUploaded: (images: ImageFile[]) => void;
@@ -148,6 +149,11 @@ export default function ImageUploader({ onImagesUploaded }: ImageUploaderProps) 
             </div>
           </div>
         )}
+      </div>
+
+      {/* 粘贴图片区域 */}
+      <div className="mt-8">
+        <ImagePasteArea onImagesAdded={onImagesUploaded} />
       </div>
 
       {/* 支持格式说明 */}
