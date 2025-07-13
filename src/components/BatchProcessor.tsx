@@ -11,11 +11,9 @@ import {
   validateImageFile,
   formatFileSize
 } from '@/lib/imageUtils';
-import { socialPlatforms } from '@/lib/socialPlatforms';
 import ImagePasteArea from './ImagePasteArea';
 import CorsHelper from './CorsHelper';
 import FormatSupport from './FormatSupport';
-import BatchCropper from './BatchCropper';
 import CropPreview from './CropPreview';
 
 interface BatchProcessorProps {
@@ -141,7 +139,7 @@ export default function BatchProcessor({ onImagesUploaded }: BatchProcessorProps
     
     try {
       const files = images.map(img => img.file);
-      let options: any = {};
+      let options: Record<string, unknown> = {};
       
       switch (processingMode) {
         case 'compress':
@@ -172,13 +170,13 @@ export default function BatchProcessor({ onImagesUploaded }: BatchProcessorProps
         files,
         processingMode,
         options,
-        (progress, current, total) => {
+        (progress) => {
           setProgress(progress);
         }
       );
       
       setProcessedFiles(results);
-    } catch (error) {
+    } catch {
       alert('批量处理失败，请重试');
     } finally {
       setIsProcessing(false);

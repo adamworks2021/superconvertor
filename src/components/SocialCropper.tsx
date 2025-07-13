@@ -12,7 +12,7 @@ interface SocialCropperProps {
 }
 
 export default function SocialCropper({ selectedImage }: SocialCropperProps) {
-  const [cropMode, setCropMode] = useState<'social' | 'interactive'>('social');
+  const [cropMode, setCropMode] = useState('social');
   const [selectedPlatform, setSelectedPlatform] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
   const [isCropping, setIsCropping] = useState(false);

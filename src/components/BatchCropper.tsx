@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, Crop, Image as ImageIcon, Scissors, Grid } from 'lucide-react';
+import { Download, Crop, Scissors, Grid } from 'lucide-react';
 import { ImageFile } from '@/types';
 import { cropImageToSize, formatFileSize, downloadFiles } from '@/lib/imageUtils';
 

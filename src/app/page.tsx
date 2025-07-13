@@ -159,7 +159,6 @@ export default function Home() {
                 <ImageProcessor
                   tool={currentTool}
                   selectedImage={selectedImage}
-                  onImageSelect={handleImageSelect}
                 />
               )}
             </div>

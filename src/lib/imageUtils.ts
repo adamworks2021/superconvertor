@@ -358,7 +358,7 @@ export function validateImageFile(file: File): boolean {
 export async function loadImageFromUrl(url: string): Promise<File> {
   try {
     // 首先尝试直接获取
-    let response: Response;
+    let response: Response | null = null;
     try {
       response = await fetch(url, {
         mode: 'cors',
@@ -366,7 +366,7 @@ export async function loadImageFromUrl(url: string): Promise<File> {
           'Accept': 'image/*'
         }
       });
-    } catch (corsError) {
+    } catch {
       // 如果CORS失败，尝试使用代理
       console.log('直接访问失败，尝试使用CORS代理...');
 
@@ -401,7 +401,7 @@ export async function loadImageFromUrl(url: string): Promise<File> {
       }
     }
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
@@ -492,8 +492,9 @@ export async function convertWebPToGif(file: File): Promise<File> {
             resolve(gifFile);
           });
 
-          gif.on('error', (error: Error) => {
-            reject(new Error('GIF编码失败: ' + error.message));
+          gif.on('error', (error: Error | string | unknown) => {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            reject(new Error('GIF编码失败: ' + errorMessage));
           });
 
           gif.render();
@@ -504,17 +505,33 @@ export async function convertWebPToGif(file: File): Promise<File> {
 
       img.onerror = () => reject(new Error('图片加载失败'));
       img.src = URL.createObjectURL(file);
-    } catch (error) {
+    } catch {
       reject(new Error('GIF库加载失败，请刷新页面重试'));
     }
   });
 }
 
 // 批量处理图片
+interface BatchProcessOptions {
+  // 压缩选项
+  quality?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  preserveExif?: boolean;
+  fileType?: string;
+
+  // 转换选项
+  targetFormat?: string;
+
+  // 裁剪选项
+  width?: number;
+  height?: number;
+}
+
 export async function batchProcessImages(
   files: File[],
   operation: 'compress' | 'convert' | 'crop',
-  options: any,
+  options: BatchProcessOptions,
   onProgress?: (progress: number, current: number, total: number) => void
 ): Promise<File[]> {
   const results: File[] = [];
@@ -533,11 +550,11 @@ export async function batchProcessImages(
           if (options.targetFormat === 'image/gif' && file.type === 'image/webp') {
             processedFile = await convertWebPToGif(file);
           } else {
-            processedFile = await convertImageFormat(file, options.targetFormat, options.quality);
+            processedFile = await convertImageFormat(file, options.targetFormat || 'image/jpeg', options.quality || 0.8);
           }
           break;
         case 'crop':
-          processedFile = await cropImageToSize(file, options.width, options.height, options.quality);
+          processedFile = await cropImageToSize(file, options.width || 1080, options.height || 1080, options.quality || 0.9);
           break;
         default:
           throw new Error('不支持的操作类型');
@@ -560,7 +577,7 @@ export async function batchProcessImages(
 }
 
 // 批量下载文件
-export function downloadFiles(files: File[], zipName?: string): void {
+export function downloadFiles(files: File[]): void {
   if (files.length === 1) {
     downloadFile(files[0]);
     return;

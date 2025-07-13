@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Upload, Image as ImageIcon, X, FileImage } from 'lucide-react';
+import { Upload, Image as ImageIcon, FileImage } from 'lucide-react';
 import { ImageFile } from '@/types';
-import { getImageInfo, validateImageFile, formatFileSize } from '@/lib/imageUtils';
+import { getImageInfo, validateImageFile } from '@/lib/imageUtils';
 
 interface ImageUploaderProps {
   onImagesUploaded: (images: ImageFile[]) => void;

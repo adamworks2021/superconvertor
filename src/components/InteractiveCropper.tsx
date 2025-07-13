@@ -32,11 +32,10 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
   const [isLoaded, setIsLoaded] = useState(false);
   const [cropArea, setCropArea] = useState<CropArea>({ x: 50, y: 50, width: 200, height: 200 });
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedRatio, setSelectedRatio] = useState<number | null>(null);
-  const [imageScale, setImageScale] = useState(1);
-  const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
+  const [imageScale] = useState(1);
+  const [imageOffset] = useState({ x: 0, y: 0 });
   const [croppedFile, setCroppedFile] = useState<File | null>(null);
 
   // 加载图片
@@ -83,8 +82,8 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
     const canvasAspect = canvas.width / canvas.height;
     const imageAspect = img.width / img.height;
     
-    let drawWidth, drawHeight, drawX, drawY;
-    
+    let drawWidth, drawHeight;
+
     if (imageAspect > canvasAspect) {
       drawWidth = canvas.width * imageScale;
       drawHeight = drawWidth / imageAspect;
@@ -92,9 +91,10 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
       drawHeight = canvas.height * imageScale;
       drawWidth = drawHeight * imageAspect;
     }
-    
-    drawX = (canvas.width - drawWidth) / 2 + imageOffset.x;
-    drawY = (canvas.height - drawHeight) / 2 + imageOffset.y;
+
+    const drawX = (canvas.width - drawWidth) / 2 + imageOffset.x;
+    const drawY = (canvas.height - drawHeight) / 2 + imageOffset.y;
+
 
     // 绘制图片
     ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
@@ -127,7 +127,7 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
   // 重绘Canvas
   useEffect(() => {
     drawCanvas();
-  }, [drawCanvas]);
+  }, [drawCanvas, isLoaded, cropArea, imageScale, imageOffset]);
 
   // 鼠标事件处理
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -164,7 +164,6 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
 
   const handleMouseUp = () => {
     setIsDragging(false);
-    setIsResizing(false);
   };
 
   // 设置宽高比
@@ -210,8 +209,8 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
     const canvasAspect = canvas.width / canvas.height;
     const imageAspect = img.width / img.height;
     
-    let drawWidth, drawHeight, drawX, drawY;
-    
+    let drawWidth, drawHeight;
+
     if (imageAspect > canvasAspect) {
       drawWidth = canvas.width * imageScale;
       drawHeight = drawWidth / imageAspect;
@@ -219,9 +218,10 @@ export default function InteractiveCropper({ selectedImage }: InteractiveCropper
       drawHeight = canvas.height * imageScale;
       drawWidth = drawHeight * imageAspect;
     }
-    
-    drawX = (canvas.width - drawWidth) / 2 + imageOffset.x;
-    drawY = (canvas.height - drawHeight) / 2 + imageOffset.y;
+
+    const drawX = (canvas.width - drawWidth) / 2 + imageOffset.x;
+    const drawY = (canvas.height - drawHeight) / 2 + imageOffset.y;
+
 
     // 计算裁剪区域在原图中的位置
     const scaleX = img.width / drawWidth;

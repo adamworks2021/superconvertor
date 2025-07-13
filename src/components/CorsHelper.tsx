@@ -59,7 +59,7 @@ export default function CorsHelper({ failedUrl, onClose }: CorsHelperProps) {
                   className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
                 >
                   <ExternalLink className="w-4 h-4 mr-1" />
-                  Chrome扩展商店搜索"CORS Unblock"
+                  Chrome扩展商店搜索&quot;CORS Unblock&quot;
                 </a>
               </div>
             </div>

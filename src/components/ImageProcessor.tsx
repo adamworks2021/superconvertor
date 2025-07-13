@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { ImageFile, ToolType } from '@/types';
 import ImageCompressor from './ImageCompressor';
 import ImageConverter from './ImageConverter';
@@ -10,10 +9,9 @@ import { AlertCircle } from 'lucide-react';
 interface ImageProcessorProps {
   tool: ToolType;
   selectedImage: ImageFile | null;
-  onImageSelect: (image: ImageFile) => void;
 }
 
-export default function ImageProcessor({ tool, selectedImage, onImageSelect }: ImageProcessorProps) {
+export default function ImageProcessor({ tool, selectedImage }: ImageProcessorProps) {
   if (!selectedImage) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -21,7 +19,7 @@ export default function ImageProcessor({ tool, selectedImage, onImageSelect }: I
           <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">请先上传图片</h3>
           <p className="text-gray-500">
-            请先在"上传图片"工具中选择要处理的图片文件
+            请先在&quot;上传图片&quot;工具中选择要处理的图片文件
           </p>
         </div>
       </div>
