@@ -479,191 +479,111 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 使用webp-hero解码动画WebP，创建真正的动画GIF
+// 诚实的解决方案：浏览器中的动画WebP转动画GIF技术限制说明
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始使用webp-hero解码动画WebP...');
+  console.log('🎬 开始处理动画WebP转换...');
 
-  try {
-    // 动态导入所需库
-    const [GIF, { WebpMachine }] = await Promise.all([
-      import('gif.js').then(m => m.default),
-      import('webp-hero')
-    ]);
+  // 检查是否为动画WebP
+  const isAnimated = await checkIfAnimatedWebP(file);
 
-    console.log('✅ gif.js和webp-hero库加载成功');
+  if (isAnimated) {
+    console.log('🎬 检测到动画WebP文件');
+    console.log('⚠️ 技术说明：在浏览器中实现真正的动画WebP转动画GIF存在技术限制');
+    console.log('💡 建议：使用服务器端工具（如CloudConvert、FFmpeg）进行专业转换');
 
+    // 提供一个带有说明的高质量静态GIF
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
 
-      reader.onload = async () => {
+      img.onload = () => {
         try {
-          const arrayBuffer = reader.result as ArrayBuffer;
-          console.log('📁 WebP文件读取成功，大小:', arrayBuffer.byteLength);
+          console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
 
-          // 创建WebP解码器
-          const webpMachine = new WebpMachine();
-          console.log('🔧 WebP解码器创建成功');
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
 
-          // 尝试解码WebP
-          const webpData = new Uint8Array(arrayBuffer);
-
-          // 检查是否为动画WebP
-          const isAnimated = await checkIfAnimatedWebP(webpData);
-
-          if (!isAnimated) {
-            console.log('⚠️ 检测到静态WebP，回退到静态转换');
-            return convertStaticWebPToGif(file).then(resolve).catch(reject);
+          if (!ctx) {
+            reject(new Error('Canvas context创建失败'));
+            return;
           }
 
-          console.log('🎬 确认为动画WebP，开始解码...');
+          canvas.width = img.width;
+          canvas.height = img.height;
 
-          // 解码WebP为PNG
-          const pngData = await webpMachine.decode(webpData);
-          console.log('✅ WebP解码成功');
+          // 绘制第一帧（浏览器只能显示第一帧）
+          ctx.drawImage(img, 0, 0);
+          console.log('🎨 已提取动画WebP的第一帧');
 
-          // 创建图像元素来获取尺寸
-          const img = new Image();
-          const pngBlob = new Blob([pngData], { type: 'image/png' });
-          const pngUrl = URL.createObjectURL(pngBlob);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              // 在文件名中标注这是从动画WebP提取的第一帧
+              const originalName = file.name.replace(/\.[^/.]+$/, '');
+              const gifFileName = `${originalName}_first_frame_from_animated_webp.gif`;
 
-          img.onload = () => {
-            try {
-              console.log('🎬 解码图像加载成功，尺寸:', img.width, 'x', img.height);
+              const gifFile = new File(
+                [blob],
+                gifFileName,
+                { type: 'image/gif' }
+              );
 
-              // 创建GIF编码器
-              const gif = new GIF({
-                workers: 1,
-                quality: 10,
-                width: img.width,
-                height: img.height,
-                repeat: 0,
-                background: '#fff',
-                dither: false,
-                debug: false
+              console.log('🎉 动画WebP第一帧转换完成:', {
+                name: gifFile.name,
+                size: gifFile.size,
+                note: '浏览器限制：只能提取第一帧'
               });
 
-              console.log('🎨 GIF编码器创建成功');
+              console.log('💡 如需真正的动画GIF，请使用：');
+              console.log('   • CloudConvert (https://cloudconvert.com/webp-to-gif)');
+              console.log('   • 本地FFmpeg工具');
+              console.log('   • 其他专业转换服务');
 
-              // 创建canvas
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
-
-              if (!ctx) {
-                throw new Error('Canvas context创建失败');
-              }
-
-              canvas.width = img.width;
-              canvas.height = img.height;
-
-              // 由于webp-hero只能解码第一帧，我们创建多个变化的帧来模拟动画
-              const frameCount = 8;
-
-              for (let i = 0; i < frameCount; i++) {
-                // 绘制基础图像
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-
-                // 添加不同的视觉效果来创建动画感
-                const phase = (i / frameCount) * Math.PI * 2;
-
-                // 方法1：轻微的色调变化
-                ctx.globalCompositeOperation = 'overlay';
-                const hue = (i * 45) % 360;
-                ctx.fillStyle = `hsla(${hue}, 30%, 50%, 0.1)`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                // 方法2：轻微的亮度变化
-                ctx.globalCompositeOperation = 'multiply';
-                const brightness = 0.9 + 0.2 * Math.sin(phase);
-                ctx.fillStyle = `rgba(${Math.round(brightness * 255)}, ${Math.round(brightness * 255)}, ${Math.round(brightness * 255)}, 0.1)`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                ctx.globalCompositeOperation = 'source-over';
-
-                // 添加帧到GIF
-                gif.addFrame(canvas, {
-                  delay: 200, // 200ms延迟
-                  copy: true
-                });
-
-                console.log(`🎨 已创建第${i + 1}帧（变化效果）`);
-              }
-
-              gif.on('finished', (blob: Blob) => {
-                console.log('🎉 动画GIF创建成功!', {
-                  size: blob.size,
-                  frames: frameCount,
-                  note: '基于WebP解码创建的动画效果'
-                });
-
-                const gifFile = new File(
-                  [blob],
-                  changeFileExtension(file.name, 'image/gif'),
-                  { type: 'image/gif' }
-                );
-
-                URL.revokeObjectURL(pngUrl);
-                resolve(gifFile);
-              });
-
-              gif.on('error', (error: any) => {
-                console.error('❌ GIF生成错误:', error);
-                URL.revokeObjectURL(pngUrl);
-                convertStaticWebPToGif(file).then(resolve).catch(reject);
-              });
-
-              gif.on('progress', (progress: number) => {
-                console.log('🎨 GIF生成进度:', Math.round(progress * 100) + '%');
-              });
-
-              console.log('🚀 开始生成动画GIF...');
-              gif.render();
-
-            } catch (error) {
-              console.error('❌ GIF创建失败:', error);
-              URL.revokeObjectURL(pngUrl);
-              convertStaticWebPToGif(file).then(resolve).catch(reject);
+              resolve(gifFile);
+            } else {
+              reject(new Error('Canvas转换失败'));
             }
-          };
-
-          img.onerror = () => {
-            console.error('❌ 解码图像加载失败');
-            URL.revokeObjectURL(pngUrl);
-            convertStaticWebPToGif(file).then(resolve).catch(reject);
-          };
-
-          img.src = pngUrl;
+          }, 'image/png', 0.98);
 
         } catch (error) {
-          console.error('❌ WebP解码失败:', error);
-          convertStaticWebPToGif(file).then(resolve).catch(reject);
+          console.error('❌ 动画WebP处理失败:', error);
+          reject(error);
         }
       };
 
-      reader.onerror = () => {
-        console.error('❌ 文件读取失败');
-        convertStaticWebPToGif(file).then(resolve).catch(reject);
+      img.onerror = (error) => {
+        console.error('❌ 动画WebP加载失败:', error);
+        reject(new Error('图片加载失败'));
       };
 
-      reader.readAsArrayBuffer(file);
+      img.src = URL.createObjectURL(file);
     });
-
-  } catch (error) {
-    console.error('❌ 库加载失败:', error);
+  } else {
+    console.log('📷 检测到静态WebP，进行标准转换');
     return convertStaticWebPToGif(file);
   }
 }
 
 // 检查是否为动画WebP
-async function checkIfAnimatedWebP(data: Uint8Array): Promise<boolean> {
-  // 查找ANIM chunk
-  for (let i = 0; i < data.length - 4; i++) {
-    if (data[i] === 0x41 && data[i + 1] === 0x4E &&
-        data[i + 2] === 0x49 && data[i + 3] === 0x4D) {
-      return true;
-    }
-  }
-  return false;
+async function checkIfAnimatedWebP(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer;
+      const view = new Uint8Array(buffer);
+
+      // 查找ANIM chunk，表示动画WebP
+      for (let i = 0; i < view.length - 4; i++) {
+        if (view[i] === 0x41 && view[i + 1] === 0x4E &&
+            view[i + 2] === 0x49 && view[i + 3] === 0x4D) {
+          resolve(true);
+          return;
+        }
+      }
+      resolve(false);
+    };
+    reader.onerror = () => resolve(false);
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 
