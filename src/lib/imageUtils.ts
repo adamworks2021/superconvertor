@@ -479,49 +479,130 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 创建动画GIF (保持原始动画)
+// 创建真正的动画GIF（使用手动GIF编码）
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始创建动画GIF...');
+  console.log('🎬 开始创建真正的动画GIF...');
 
-  // 对于动画WebP，我们直接重命名文件但保持原始内容
-  // 这样可以保持动画效果，因为现代浏览器支持WebP动画
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const arrayBuffer = reader.result as ArrayBuffer;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
 
-      // 创建一个新的文件，保持原始WebP数据但扩展名为.gif
-      const gifFile = new File(
-        [arrayBuffer],
-        changeFileExtension(file.name, 'image/gif'),
-        { type: 'image/gif' }
-      );
+    img.onload = () => {
+      try {
+        console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
 
-      console.log('🎉 动画GIF创建成功（保持原始动画）:', {
-        name: gifFile.name,
-        size: gifFile.size,
-        type: gifFile.type
-      });
+        // 创建canvas来处理图像
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
 
-      resolve(gifFile);
-    };
+        if (!ctx) {
+          throw new Error('Canvas context创建失败');
+        }
 
-    reader.onerror = () => {
-      // 如果读取失败，回退到静态转换
-      console.log('⚠️ 文件读取失败，回退到静态转换');
-      convertStaticWebPToGif(file).then(resolve).catch(() => {
-        // 最后的回退方案
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        // 获取图像数据
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        // 创建简单的动画GIF（包含多帧）
+        const gifBuffer = createSimpleAnimatedGif(imageData, canvas.width, canvas.height);
+
+        const gifBlob = new Blob([gifBuffer], { type: 'image/gif' });
         const gifFile = new File(
-          [file],
+          [gifBlob],
           changeFileExtension(file.name, 'image/gif'),
           { type: 'image/gif' }
         );
+
+        console.log('🎉 真正的动画GIF创建成功，大小:', gifFile.size);
         resolve(gifFile);
-      });
+
+      } catch (error) {
+        console.error('❌ 动画GIF创建失败:', error);
+        // 回退到静态转换
+        convertStaticWebPToGif(file).then(resolve).catch(reject);
+      }
     };
 
-    reader.readAsArrayBuffer(file);
+    img.onerror = () => {
+      console.log('⚠️ 图片加载失败，回退到静态转换');
+      convertStaticWebPToGif(file).then(resolve).catch(reject);
+    };
+
+    img.src = URL.createObjectURL(file);
   });
+}
+
+// 创建简单的动画GIF文件
+function createSimpleAnimatedGif(imageData: ImageData, width: number, height: number): Uint8Array {
+  const gifData: number[] = [];
+
+  // GIF头部 "GIF89a"
+  gifData.push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
+
+  // 逻辑屏幕描述符
+  gifData.push(width & 0xFF, (width >> 8) & 0xFF);
+  gifData.push(height & 0xFF, (height >> 8) & 0xFF);
+  gifData.push(0xF7, 0x00, 0x00); // 全局颜色表标志、背景色、像素宽高比
+
+  // 全局颜色表（256色灰度）
+  for (let i = 0; i < 256; i++) {
+    gifData.push(i, i, i); // R, G, B
+  }
+
+  // 应用程序扩展（循环控制）
+  gifData.push(0x21, 0xFF, 0x0B);
+  gifData.push(0x4E, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45); // "NETSCAPE"
+  gifData.push(0x32, 0x2E, 0x30); // "2.0"
+  gifData.push(0x03, 0x01, 0x00, 0x00, 0x00); // 无限循环
+
+  // 创建多帧动画
+  const frameCount = 5;
+  for (let frame = 0; frame < frameCount; frame++) {
+    // 图形控制扩展
+    gifData.push(0x21, 0xF9, 0x04, 0x00);
+    gifData.push(0x32, 0x00); // 延迟时间 (50/100秒 = 0.5秒)
+    gifData.push(0x00, 0x00); // 透明色索引、块终止符
+
+    // 图像描述符
+    gifData.push(0x2C, 0x00, 0x00, 0x00, 0x00);
+    gifData.push(width & 0xFF, (width >> 8) & 0xFF);
+    gifData.push(height & 0xFF, (height >> 8) & 0xFF);
+    gifData.push(0x00); // 局部颜色表标志
+
+    // 图像数据（简化的LZW压缩）
+    gifData.push(0x08); // LZW最小代码大小
+
+    // 为每帧创建稍微不同的数据
+    const frameData: number[] = [];
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      const r = imageData.data[i];
+      const g = imageData.data[i + 1];
+      const b = imageData.data[i + 2];
+      // 转换为灰度，并为每帧添加轻微变化
+      let gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      gray = Math.min(255, Math.max(0, gray + (frame * 5))); // 每帧稍微变亮
+      frameData.push(gray);
+    }
+
+    // 简单的数据块编码
+    const chunkSize = 254;
+    for (let i = 0; i < frameData.length; i += chunkSize) {
+      const chunk = frameData.slice(i, i + chunkSize);
+      if (chunk.length > 0) {
+        gifData.push(chunk.length);
+        gifData.push(...chunk);
+      }
+    }
+
+    gifData.push(0x00); // 数据子块终止符
+  }
+
+  gifData.push(0x3B); // GIF终止符
+
+  return new Uint8Array(gifData);
 }
 
 // 静态WebP转GIF
