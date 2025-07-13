@@ -479,72 +479,152 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 创建高质量的"GIF"文件（实际为PNG格式，但扩展名为.gif）
+// 使用video元素提取动画WebP帧，创建真正的动画GIF
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始创建高质量GIF文件（动画WebP转换）...');
+  console.log('🎬 开始使用video元素提取动画WebP帧...');
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+  try {
+    // 动态导入gif.js
+    const GIF = (await import('gif.js')).default;
+    console.log('✅ gif.js库加载成功');
 
-    img.onload = () => {
-      try {
-        console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.loop = false;
+      video.preload = 'metadata';
+      video.crossOrigin = 'anonymous';
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+      // 设置video源为WebP文件
+      const url = URL.createObjectURL(file);
+      video.src = url;
 
-        if (!ctx) {
-          reject(new Error('Canvas context创建失败'));
-          return;
-        }
+      video.onloadedmetadata = async () => {
+        try {
+          console.log('🎬 动画WebP视频元数据加载成功:', {
+            duration: video.duration,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight
+          });
 
-        canvas.width = img.width;
-        canvas.height = img.height;
+          if (video.duration === 0 || isNaN(video.duration)) {
+            console.log('⚠️ 检测到静态WebP，回退到静态转换');
+            URL.revokeObjectURL(url);
+            return convertStaticWebPToGif(file).then(resolve).catch(reject);
+          }
 
-        // 绘制原始图像（保持原始颜色和质量）
-        ctx.drawImage(img, 0, 0);
-        console.log('🎨 图像已绘制到canvas，保持原始颜色');
+          // 创建GIF编码器
+          const gif = new GIF({
+            workers: 1,
+            quality: 15,
+            width: video.videoWidth,
+            height: video.videoHeight,
+            repeat: 0,
+            background: '#fff',
+            dither: false,
+            debug: false
+          });
 
-        // 转换为高质量PNG格式，文件名为.gif
-        canvas.toBlob((blob) => {
-          if (blob) {
-            // 创建文件名，标注这是从动画WebP转换的
-            const originalName = file.name.replace(/\.[^/.]+$/, '');
-            const gifFileName = `${originalName}_from_animated_webp.gif`;
+          console.log('🎨 GIF编码器创建成功');
+
+          // 创建canvas用于捕获帧
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            throw new Error('Canvas context创建失败');
+          }
+
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+
+          // 计算要提取的帧数和时间间隔
+          const frameCount = Math.min(10, Math.ceil(video.duration * 10)); // 最多10帧
+          const timeStep = video.duration / frameCount;
+
+          console.log(`🎬 准备提取${frameCount}帧，时间间隔:${timeStep.toFixed(3)}秒`);
+
+          let frameIndex = 0;
+
+          const captureFrame = () => {
+            return new Promise<void>((frameResolve) => {
+              const currentTime = frameIndex * timeStep;
+              video.currentTime = currentTime;
+
+              video.onseeked = () => {
+                // 绘制当前帧到canvas
+                ctx.drawImage(video, 0, 0);
+
+                // 添加帧到GIF
+                gif.addFrame(canvas, {
+                  delay: Math.max(100, timeStep * 1000), // 至少100ms延迟
+                  copy: true
+                });
+
+                console.log(`🎨 已捕获第${frameIndex + 1}帧 (时间: ${currentTime.toFixed(3)}s)`);
+                frameIndex++;
+                frameResolve();
+              };
+            });
+          };
+
+          // 依次捕获所有帧
+          for (let i = 0; i < frameCount; i++) {
+            await captureFrame();
+          }
+
+          console.log('🎬 所有帧捕获完成，开始生成GIF...');
+
+          gif.on('finished', (blob: Blob) => {
+            console.log('🎉 真正的动画GIF创建成功!', {
+              size: blob.size,
+              frames: frameCount,
+              duration: video.duration
+            });
 
             const gifFile = new File(
               [blob],
-              gifFileName,
+              changeFileExtension(file.name, 'image/gif'),
               { type: 'image/gif' }
             );
 
-            console.log('🎉 高质量GIF文件创建成功:', {
-              name: gifFile.name,
-              size: gifFile.size,
-              type: gifFile.type,
-              note: '动画WebP已转换为高质量静态GIF'
-            });
-
+            URL.revokeObjectURL(url);
             resolve(gifFile);
-          } else {
-            reject(new Error('Canvas转换失败'));
-          }
-        }, 'image/png', 0.98); // 极高质量PNG
+          });
 
-      } catch (error) {
-        console.error('❌ 动画GIF创建失败:', error);
-        reject(error);
-      }
-    };
+          gif.on('error', (error: any) => {
+            console.error('❌ GIF生成错误:', error);
+            URL.revokeObjectURL(url);
+            convertStaticWebPToGif(file).then(resolve).catch(reject);
+          });
 
-    img.onerror = (error) => {
-      console.error('❌ 图片加载失败:', error);
-      reject(new Error('图片加载失败'));
-    };
+          gif.on('progress', (progress: number) => {
+            console.log('🎨 GIF生成进度:', Math.round(progress * 100) + '%');
+          });
 
-    img.src = URL.createObjectURL(file);
-  });
+          gif.render();
+
+        } catch (error) {
+          console.error('❌ 动画帧提取失败:', error);
+          URL.revokeObjectURL(url);
+          convertStaticWebPToGif(file).then(resolve).catch(reject);
+        }
+      };
+
+      video.onerror = (error) => {
+        console.error('❌ Video加载失败:', error);
+        URL.revokeObjectURL(url);
+        convertStaticWebPToGif(file).then(resolve).catch(reject);
+      };
+
+      // 开始加载video
+      video.load();
+    });
+
+  } catch (error) {
+    console.error('❌ gif.js库加载失败:', error);
+    return convertStaticWebPToGif(file);
+  }
 }
 
 
