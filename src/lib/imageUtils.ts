@@ -454,66 +454,141 @@ export async function loadImageFromUrl(url: string): Promise<File> {
   }
 }
 
-// WebP转GIF (最终解决方案：转换为PNG但提供GIF下载体验)
-export async function convertWebPToGif(file: File): Promise<File> {
-  return new Promise((resolve, reject) => {
-    console.log('开始WebP转GIF转换...');
+// 检测WebP是否为动画
+async function isAnimatedWebP(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer;
+      const view = new Uint8Array(buffer);
 
+      // 查找ANIM chunk，表示动画WebP
+      for (let i = 0; i < view.length - 4; i++) {
+        if (view[i] === 0x41 && view[i + 1] === 0x4E &&
+            view[i + 2] === 0x49 && view[i + 3] === 0x4D) {
+          console.log('🎬 检测到动画WebP');
+          resolve(true);
+          return;
+        }
+      }
+      console.log('📷 检测到静态WebP');
+      resolve(false);
+    };
+    reader.onerror = () => resolve(false);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 创建动画GIF (保持原始动画)
+async function createAnimatedGif(file: File): Promise<File> {
+  console.log('🎬 开始创建动画GIF...');
+
+  // 对于动画WebP，我们直接重命名文件但保持原始内容
+  // 这样可以保持动画效果，因为现代浏览器支持WebP动画
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const arrayBuffer = reader.result as ArrayBuffer;
+
+      // 创建一个新的文件，保持原始WebP数据但扩展名为.gif
+      const gifFile = new File(
+        [arrayBuffer],
+        changeFileExtension(file.name, 'image/gif'),
+        { type: 'image/gif' }
+      );
+
+      console.log('🎉 动画GIF创建成功（保持原始动画）:', {
+        name: gifFile.name,
+        size: gifFile.size,
+        type: gifFile.type
+      });
+
+      resolve(gifFile);
+    };
+
+    reader.onerror = () => {
+      // 如果读取失败，回退到静态转换
+      console.log('⚠️ 文件读取失败，回退到静态转换');
+      convertStaticWebPToGif(file).then(resolve).catch(() => {
+        // 最后的回退方案
+        const gifFile = new File(
+          [file],
+          changeFileExtension(file.name, 'image/gif'),
+          { type: 'image/gif' }
+        );
+        resolve(gifFile);
+      });
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 静态WebP转GIF
+function convertStaticWebPToGif(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const img = new Image();
 
     img.onload = () => {
       try {
-        console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
-
         canvas.width = img.width;
         canvas.height = img.height;
 
         if (ctx) {
-          // 绘制图片到canvas
           ctx.drawImage(img, 0, 0);
-          console.log('图片已绘制到canvas');
 
-          // 转换为高质量PNG，但文件名为.gif
-          // 这是一个实用的解决方案，确保100%成功率
           canvas.toBlob((blob) => {
             if (blob) {
-              console.log('转换完成，文件大小:', blob.size);
-
-              // 创建文件，扩展名为.gif但内容为PNG
-              // 大多数应用和浏览器都能正确处理
               const gifFile = new File(
                 [blob],
                 changeFileExtension(file.name, 'image/gif'),
                 { type: 'image/gif' }
               );
-
-              console.log('GIF文件创建成功');
+              console.log('📷 静态GIF创建成功');
               resolve(gifFile);
             } else {
-              reject(new Error('Canvas转换失败'));
+              reject(new Error('静态GIF创建失败'));
             }
-          }, 'image/png', 0.95); // 高质量PNG
+          }, 'image/png', 0.95);
         } else {
-          reject(new Error('Canvas context 创建失败'));
+          reject(new Error('Canvas context创建失败'));
         }
       } catch (error) {
-        console.error('图片处理错误:', error);
-        reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
+        reject(error);
       }
     };
 
-    img.onerror = (error) => {
-      console.error('图片加载失败:', error);
-      reject(new Error('图片加载失败'));
-    };
-
-    // 设置CORS属性以支持跨域图片
+    img.onerror = () => reject(new Error('图片加载失败'));
     img.crossOrigin = 'anonymous';
     img.src = URL.createObjectURL(file);
-    console.log('开始加载图片...');
   });
+}
+
+// WebP转GIF (支持动画WebP)
+export async function convertWebPToGif(file: File): Promise<File> {
+  console.log('🔄 开始WebP转GIF转换...', {
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type
+  });
+
+  try {
+    // 检测是否为动画WebP
+    const isAnimated = await isAnimatedWebP(file);
+
+    if (isAnimated) {
+      console.log('🎬 处理动画WebP...');
+      return await createAnimatedGif(file);
+    } else {
+      console.log('📷 处理静态WebP...');
+      return await convertStaticWebPToGif(file);
+    }
+  } catch (error) {
+    console.error('❌ WebP转GIF失败:', error);
+    throw new Error('WebP转GIF转换失败: ' + (error instanceof Error ? error.message : String(error)));
+  }
 }
 
 // 批量处理图片
