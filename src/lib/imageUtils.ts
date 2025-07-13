@@ -454,177 +454,105 @@ export async function loadImageFromUrl(url: string): Promise<File> {
   }
 }
 
-// 创建简单的GIF文件（不依赖外部库）
-function createSimpleGif(imageData: Uint8ClampedArray, width: number, height: number): Uint8Array {
-  // 简化的256色调色板
-  const palette = new Uint8Array(768); // 256 * 3
-  for (let i = 0; i < 256; i++) {
-    palette[i * 3] = i;     // R
-    palette[i * 3 + 1] = i; // G
-    palette[i * 3 + 2] = i; // B
-  }
-
-  // 将RGBA转换为索引颜色
-  const indexedData = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i++) {
-    const r = imageData[i * 4];
-    const g = imageData[i * 4 + 1];
-    const b = imageData[i * 4 + 2];
-    // 简单的灰度转换
-    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-    indexedData[i] = gray;
-  }
-
-  // 构建GIF文件
-  const gifData: number[] = [];
-
-  // GIF头部 "GIF89a"
-  gifData.push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
-
-  // 逻辑屏幕描述符
-  gifData.push(width & 0xFF, (width >> 8) & 0xFF);  // 宽度
-  gifData.push(height & 0xFF, (height >> 8) & 0xFF); // 高度
-  gifData.push(0xF7); // 全局颜色表标志
-  gifData.push(0x00); // 背景颜色索引
-  gifData.push(0x00); // 像素宽高比
-
-  // 全局颜色表
-  for (let i = 0; i < 768; i++) {
-    gifData.push(palette[i]);
-  }
-
-  // 应用程序扩展（循环）
-  gifData.push(0x21, 0xFF, 0x0B);
-  gifData.push(0x4E, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45); // "NETSCAPE"
-  gifData.push(0x32, 0x2E, 0x30); // "2.0"
-  gifData.push(0x03, 0x01, 0x00, 0x00, 0x00); // 循环次数
-
-  // 图形控制扩展
-  gifData.push(0x21, 0xF9, 0x04, 0x00, 0x64, 0x00, 0x00, 0x00);
-
-  // 图像描述符
-  gifData.push(0x2C); // 图像分隔符
-  gifData.push(0x00, 0x00, 0x00, 0x00); // 左、上边距
-  gifData.push(width & 0xFF, (width >> 8) & 0xFF);  // 图像宽度
-  gifData.push(height & 0xFF, (height >> 8) & 0xFF); // 图像高度
-  gifData.push(0x00); // 局部颜色表标志
-
-  // LZW压缩数据（修复版）
-  gifData.push(0x08); // LZW最小代码大小
-
-  // 简单但有效的图像数据编码
-  // 使用未压缩的数据格式
-  const clearCode = 256;
-  const endCode = 257;
-
-  // 创建简单的LZW数据流
-  const lzwData: number[] = [];
-
-  // 添加清除码
-  lzwData.push(clearCode);
-
-  // 添加图像数据（每个像素作为一个代码）
-  for (let i = 0; i < indexedData.length; i++) {
-    lzwData.push(indexedData[i]);
-  }
-
-  // 添加结束码
-  lzwData.push(endCode);
-
-  // 将代码打包成字节（9位代码打包成字节）
-  let bitBuffer = 0;
-  let bitCount = 0;
-  const packedData: number[] = [];
-
-  for (const code of lzwData) {
-    bitBuffer |= (code << bitCount);
-    bitCount += 9;
-
-    while (bitCount >= 8) {
-      packedData.push(bitBuffer & 0xFF);
-      bitBuffer >>= 8;
-      bitCount -= 8;
-    }
-  }
-
-  // 处理剩余的位
-  if (bitCount > 0) {
-    packedData.push(bitBuffer & 0xFF);
-  }
-
-  // 将数据分成子块
-  const chunkSize = 254;
-  for (let i = 0; i < packedData.length; i += chunkSize) {
-    const chunk = packedData.slice(i, i + chunkSize);
-    gifData.push(chunk.length);
-    for (const byte of chunk) {
-      gifData.push(byte);
-    }
-  }
-
-  gifData.push(0x00); // 数据子块终止符
-  gifData.push(0x3B); // GIF终止符
-
-  return new Uint8Array(gifData);
-}
-
-// WebP转GIF (不依赖外部库的可靠方案)
+// WebP转GIF (使用gif.js库的正确配置，基于Context7最新文档)
 export async function convertWebPToGif(file: File): Promise<File> {
-  return new Promise((resolve, reject) => {
-    console.log('开始WebP转GIF转换...');
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('开始WebP转GIF转换...');
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
+      // 动态导入gif.js
+      const GIF = (await import('gif.js')).default;
+      console.log('GIF.js库加载成功');
 
-    img.onload = () => {
-      try {
-        console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
 
-        canvas.width = img.width;
-        canvas.height = img.height;
+      img.onload = () => {
+        try {
+          console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
 
-        if (ctx) {
-          // 绘制图片到canvas
-          ctx.drawImage(img, 0, 0);
-          console.log('图片已绘制到canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
 
-          // 获取图像数据
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          console.log('获取图像数据成功');
+          if (ctx) {
+            // 绘制图片到canvas
+            ctx.drawImage(img, 0, 0);
+            console.log('图片已绘制到canvas');
 
-          // 创建GIF文件
-          const gifBuffer = createSimpleGif(imageData.data, canvas.width, canvas.height);
-          console.log('GIF文件创建成功，大小:', gifBuffer.length);
+            // 使用Context7文档中推荐的配置
+            const gif = new GIF({
+              workers: 2,           // 使用2个worker（文档推荐）
+              quality: 10,          // 质量设置（文档推荐）
+              width: canvas.width,
+              height: canvas.height,
+              repeat: 0,            // 0 = 无限循环
+              background: '#fff',   // 白色背景
+              transparent: null,    // 不使用透明
+              dither: false,        // 不使用抖动
+              debug: false          // 不显示调试信息
+            });
 
-          // 创建文件
-          const gifBlob = new Blob([gifBuffer], { type: 'image/gif' });
-          const gifFile = new File(
-            [gifBlob],
-            changeFileExtension(file.name, 'image/gif'),
-            { type: 'image/gif' }
-          );
+            console.log('GIF编码器创建成功');
 
-          console.log('转换完成');
-          resolve(gifFile);
-        } else {
-          reject(new Error('Canvas context 创建失败'));
+            // 使用文档中推荐的addFrame方法
+            gif.addFrame(canvas, {
+              delay: 500,    // 500ms延迟（文档默认值）
+              copy: true,    // 复制像素数据（重要！）
+              dispose: -1    // 默认处理方式
+            });
+
+            console.log('帧已添加到GIF');
+
+            // 设置事件监听器
+            gif.on('finished', function(blob: Blob) {
+              console.log('GIF编码完成，大小:', blob.size);
+              const gifFile = new File(
+                [blob],
+                changeFileExtension(file.name, 'image/gif'),
+                { type: 'image/gif' }
+              );
+              resolve(gifFile);
+            });
+
+            gif.on('error', function(error: Error | string | unknown) {
+              console.error('GIF编码错误:', error);
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              reject(new Error('GIF编码失败: ' + errorMessage));
+            });
+
+            gif.on('progress', function(progress: number) {
+              console.log('GIF编码进度:', Math.round(progress * 100) + '%');
+            });
+
+            console.log('开始GIF渲染...');
+
+            // 立即开始渲染
+            gif.render();
+
+          } else {
+            reject(new Error('Canvas context 创建失败'));
+          }
+        } catch (error) {
+          console.error('图片处理错误:', error);
+          reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
         }
-      } catch (error) {
-        console.error('图片处理错误:', error);
-        reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
-      }
-    };
+      };
 
-    img.onerror = (error) => {
-      console.error('图片加载失败:', error);
-      reject(new Error('图片加载失败'));
-    };
+      img.onerror = (error) => {
+        console.error('图片加载失败:', error);
+        reject(new Error('图片加载失败'));
+      };
 
-    // 设置CORS属性以支持跨域图片
-    img.crossOrigin = 'anonymous';
-    img.src = URL.createObjectURL(file);
-    console.log('开始加载图片...');
+      // 设置CORS属性以支持跨域图片
+      img.crossOrigin = 'anonymous';
+      img.src = URL.createObjectURL(file);
+      console.log('开始加载图片...');
+
+    } catch (error) {
+      console.error('GIF库加载失败:', error);
+      reject(new Error('GIF库加载失败，请刷新页面重试: ' + (error instanceof Error ? error.message : String(error))));
+    }
   });
 }
 
