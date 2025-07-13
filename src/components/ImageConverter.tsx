@@ -25,17 +25,34 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
   const [isConverting, setIsConverting] = useState(false);
   const [convertedFile, setConvertedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [conversionProgress, setConversionProgress] = useState(0);
+  const [conversionStatus, setConversionStatus] = useState('');
 
   const handleConvert = async () => {
     setIsConverting(true);
+    setConversionProgress(0);
+    setConversionStatus('准备转换...');
+
     try {
       let converted: File;
 
       // 特殊处理WebP转GIF
       if (selectedImage.file.type === 'image/webp' && targetFormat === 'image/gif') {
+        setConversionStatus('正在转换WebP为GIF...');
+        setConversionProgress(25);
+
         converted = await convertWebPToGif(selectedImage.file);
+
+        setConversionProgress(75);
+        setConversionStatus('转换完成，生成预览...');
       } else {
+        setConversionStatus('正在转换格式...');
+        setConversionProgress(25);
+
         converted = await convertImageFormat(selectedImage.file, targetFormat, quality);
+
+        setConversionProgress(75);
+        setConversionStatus('转换完成，生成预览...');
       }
 
       setConvertedFile(converted);
@@ -46,9 +63,22 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
       }
       const newPreviewUrl = URL.createObjectURL(converted);
       setPreviewUrl(newPreviewUrl);
+
+      setConversionProgress(100);
+      setConversionStatus('转换成功！');
+
+      // 清除状态
+      setTimeout(() => {
+        setConversionProgress(0);
+        setConversionStatus('');
+      }, 2000);
+
     } catch (error) {
       console.error('格式转换失败:', error);
-      alert('格式转换失败，请重试');
+      setConversionStatus('转换失败');
+
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      alert(`格式转换失败: ${errorMessage}\n\n请尝试以下解决方案：\n1. 刷新页面重试\n2. 检查图片文件是否损坏\n3. 尝试其他格式转换`);
     } finally {
       setIsConverting(false);
     }
@@ -187,6 +217,22 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
             </div>
           )}
 
+          {/* 进度显示 */}
+          {isConverting && (
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-600">{conversionStatus}</span>
+                <span className="text-sm font-medium text-blue-600">{conversionProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${conversionProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* 转换按钮 */}
           <button
             onClick={handleConvert}
@@ -200,7 +246,7 @@ export default function ImageConverter({ selectedImage }: ImageConverterProps) {
             {isConverting ? (
               <span className="flex items-center justify-center">
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                转换中...
+                {conversionStatus} {conversionProgress}%
               </span>
             ) : isCurrentFormat ? (
               '已是目标格式'

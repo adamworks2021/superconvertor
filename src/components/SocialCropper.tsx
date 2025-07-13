@@ -5,7 +5,7 @@ import { Download, Crop, Image as ImageIcon, Smartphone, Monitor, Scissors } fro
 import { ImageFile } from '@/types';
 import { cropImageToSize, formatFileSize, downloadFile } from '@/lib/imageUtils';
 import { socialPlatforms, getDomesticPlatforms, getInternationalPlatforms } from '@/lib/socialPlatforms';
-import InteractiveCropper from './InteractiveCropper';
+// import InteractiveCropper from './InteractiveCropper';
 
 interface SocialCropperProps {
   selectedImage: ImageFile;
@@ -73,7 +73,18 @@ export default function SocialCropper({ selectedImage }: SocialCropperProps) {
 
   // 如果选择交互式裁剪，显示交互式裁剪器
   if (cropMode === 'interactive') {
-    return <InteractiveCropper selectedImage={selectedImage} />;
+    return (
+      <div className="p-8 text-center">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">交互式裁剪功能开发中</h2>
+        <p className="text-gray-600 mb-4">该功能正在开发中，请暂时使用社交平台标准尺寸裁剪。</p>
+        <button
+          onClick={() => setCropMode('social')}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          返回社交平台裁剪
+        </button>
+      </div>
+    );
   }
 
   return (
