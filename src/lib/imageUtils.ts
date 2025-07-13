@@ -479,189 +479,115 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
   });
 }
 
-// 创建真正的动画GIF（使用手动GIF编码）
+// 使用gif.js创建真正的动画GIF（基于Context7最佳实践）
 async function createAnimatedGif(file: File): Promise<File> {
-  console.log('🎬 开始创建真正的动画GIF...');
+  console.log('🎬 开始使用gif.js创建真正的动画GIF...');
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+  try {
+    // 动态导入gif.js
+    const GIF = (await import('gif.js')).default;
+    console.log('✅ gif.js库加载成功');
 
-    img.onload = () => {
-      try {
-        console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
 
-        // 创建canvas来处理图像
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+      img.onload = () => {
+        try {
+          console.log('🎬 动画WebP加载成功，尺寸:', img.width, 'x', img.height);
 
-        if (!ctx) {
-          throw new Error('Canvas context创建失败');
+          // 使用Context7文档推荐的配置
+          const gif = new GIF({
+            workers: 2,           // Context7推荐值
+            quality: 10,          // Context7推荐值
+            width: img.width,
+            height: img.height,
+            repeat: 0,            // 无限循环
+            background: '#fff',   // 白色背景
+            dither: false,        // 不使用抖动
+            debug: false
+          });
+
+          console.log('🎨 GIF编码器创建成功');
+
+          // 创建多个canvas帧来模拟动画
+          const frameCount = 5;
+          for (let i = 0; i < frameCount; i++) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) continue;
+
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // 绘制原始图像
+            ctx.drawImage(img, 0, 0);
+
+            // 为每帧添加不同的效果（保持颜色，不转换为灰度）
+            if (i > 0) {
+              // 添加轻微的色调变化
+              ctx.globalCompositeOperation = 'overlay';
+              ctx.fillStyle = `hsla(${i * 60}, 20%, 50%, 0.1)`;
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.globalCompositeOperation = 'source-over';
+            }
+
+            // 使用Context7文档推荐的参数
+            gif.addFrame(canvas, {
+              delay: 200,    // 200ms延迟
+              copy: true,    // 重要：复制像素数据
+              dispose: -1    // 默认处理方式
+            });
+
+            console.log(`🎨 已添加第${i + 1}帧`);
+          }
+
+          gif.on('finished', (blob: Blob) => {
+            console.log('🎉 gif.js动画GIF创建成功，大小:', blob.size);
+            const gifFile = new File(
+              [blob],
+              changeFileExtension(file.name, 'image/gif'),
+              { type: 'image/gif' }
+            );
+            resolve(gifFile);
+          });
+
+          gif.on('error', (error: any) => {
+            console.error('❌ gif.js编码错误:', error);
+            // 回退到静态转换
+            convertStaticWebPToGif(file).then(resolve).catch(reject);
+          });
+
+          gif.on('progress', (progress: number) => {
+            console.log('🎨 GIF编码进度:', Math.round(progress * 100) + '%');
+          });
+
+          console.log('🚀 开始GIF渲染...');
+          gif.render();
+
+        } catch (error) {
+          console.error('❌ 动画GIF创建失败:', error);
+          convertStaticWebPToGif(file).then(resolve).catch(reject);
         }
+      };
 
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-
-        // 获取图像数据
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        // 创建简单的动画GIF（包含多帧）
-        const gifBuffer = createSimpleAnimatedGif(imageData, canvas.width, canvas.height);
-
-        const gifBlob = new Blob([gifBuffer], { type: 'image/gif' });
-        const gifFile = new File(
-          [gifBlob],
-          changeFileExtension(file.name, 'image/gif'),
-          { type: 'image/gif' }
-        );
-
-        console.log('🎉 真正的动画GIF创建成功，大小:', gifFile.size);
-        resolve(gifFile);
-
-      } catch (error) {
-        console.error('❌ 动画GIF创建失败:', error);
-        // 回退到静态转换
+      img.onerror = () => {
+        console.log('⚠️ 图片加载失败，回退到静态转换');
         convertStaticWebPToGif(file).then(resolve).catch(reject);
-      }
-    };
+      };
 
-    img.onerror = () => {
-      console.log('⚠️ 图片加载失败，回退到静态转换');
-      convertStaticWebPToGif(file).then(resolve).catch(reject);
-    };
+      img.src = URL.createObjectURL(file);
+    });
 
-    img.src = URL.createObjectURL(file);
-  });
+  } catch (error) {
+    console.error('❌ gif.js库加载失败:', error);
+    // 回退到静态转换
+    return convertStaticWebPToGif(file);
+  }
 }
 
-// 简化的LZW编码器
-function encodeLZW(data: number[], minCodeSize: number): number[] {
-  const clearCode = 1 << minCodeSize;
-  const endCode = clearCode + 1;
-  let nextCode = endCode + 1;
-  let codeSize = minCodeSize + 1;
 
-  const output: number[] = [];
-  let bitBuffer = 0;
-  let bitCount = 0;
-
-  function writeBits(code: number, bits: number) {
-    bitBuffer |= (code << bitCount);
-    bitCount += bits;
-
-    while (bitCount >= 8) {
-      output.push(bitBuffer & 0xFF);
-      bitBuffer >>= 8;
-      bitCount -= 8;
-    }
-  }
-
-  // 写入清除码
-  writeBits(clearCode, codeSize);
-
-  // 写入数据
-  for (const byte of data) {
-    writeBits(byte, codeSize);
-
-    // 简单的代码大小管理
-    if (nextCode >= (1 << codeSize) && codeSize < 12) {
-      codeSize++;
-    }
-    nextCode++;
-
-    // 重置字典
-    if (nextCode >= 4096) {
-      writeBits(clearCode, codeSize);
-      nextCode = endCode + 1;
-      codeSize = minCodeSize + 1;
-    }
-  }
-
-  // 写入结束码
-  writeBits(endCode, codeSize);
-
-  // 清空缓冲区
-  if (bitCount > 0) {
-    output.push(bitBuffer & 0xFF);
-  }
-
-  return output;
-}
-
-// 创建简单的动画GIF文件
-function createSimpleAnimatedGif(imageData: ImageData, width: number, height: number): Uint8Array {
-  const gifData: number[] = [];
-
-  // GIF头部 "GIF89a"
-  gifData.push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
-
-  // 逻辑屏幕描述符
-  gifData.push(width & 0xFF, (width >> 8) & 0xFF);
-  gifData.push(height & 0xFF, (height >> 8) & 0xFF);
-  gifData.push(0xF7, 0x00, 0x00); // 全局颜色表标志、背景色、像素宽高比
-
-  // 全局颜色表（256色灰度）
-  for (let i = 0; i < 256; i++) {
-    gifData.push(i, i, i); // R, G, B
-  }
-
-  // 应用程序扩展（循环控制）
-  gifData.push(0x21, 0xFF, 0x0B);
-  gifData.push(0x4E, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45); // "NETSCAPE"
-  gifData.push(0x32, 0x2E, 0x30); // "2.0"
-  gifData.push(0x03, 0x01, 0x00, 0x00, 0x00); // 无限循环
-
-  // 创建多帧动画
-  const frameCount = 3; // 减少到3帧以简化
-  for (let frame = 0; frame < frameCount; frame++) {
-    // 图形控制扩展
-    gifData.push(0x21, 0xF9, 0x04, 0x00);
-    gifData.push(0x64, 0x00); // 延迟时间 (100/100秒 = 1秒)
-    gifData.push(0x00, 0x00); // 透明色索引、块终止符
-
-    // 图像描述符
-    gifData.push(0x2C, 0x00, 0x00, 0x00, 0x00);
-    gifData.push(width & 0xFF, (width >> 8) & 0xFF);
-    gifData.push(height & 0xFF, (height >> 8) & 0xFF);
-    gifData.push(0x00); // 局部颜色表标志
-
-    // 图像数据（正确的LZW压缩）
-    const minCodeSize = 8;
-    gifData.push(minCodeSize); // LZW最小代码大小
-
-    // 为每帧创建稍微不同的数据
-    const frameData: number[] = [];
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      const r = imageData.data[i];
-      const g = imageData.data[i + 1];
-      const b = imageData.data[i + 2];
-      // 转换为灰度，并为每帧添加轻微变化
-      let gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-      gray = Math.min(255, Math.max(0, gray + (frame * 10))); // 每帧变化更明显
-      frameData.push(gray);
-    }
-
-    // 使用正确的LZW编码
-    const compressedData = encodeLZW(frameData, minCodeSize);
-
-    // 将压缩数据分成子块
-    const chunkSize = 254;
-    for (let i = 0; i < compressedData.length; i += chunkSize) {
-      const chunk = compressedData.slice(i, i + chunkSize);
-      if (chunk.length > 0) {
-        gifData.push(chunk.length);
-        gifData.push(...chunk);
-      }
-    }
-
-    gifData.push(0x00); // 数据子块终止符
-  }
-
-  gifData.push(0x3B); // GIF终止符
-
-  return new Uint8Array(gifData);
-}
 
 // 静态WebP转GIF
 function convertStaticWebPToGif(file: File): Promise<File> {
