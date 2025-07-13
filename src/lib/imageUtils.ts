@@ -454,63 +454,107 @@ export async function loadImageFromUrl(url: string): Promise<File> {
   }
 }
 
-// WebP转GIF (简化版本，直接转换为PNG格式但保持.gif扩展名)
+// WebP转GIF (使用gif.js库，但配置超时和重试机制)
 export async function convertWebPToGif(file: File): Promise<File> {
-  return new Promise((resolve, reject) => {
-    console.log('开始WebP转GIF转换...');
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('开始WebP转GIF转换...');
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
+      // 设置超时
+      const timeout = setTimeout(() => {
+        reject(new Error('转换超时，请重试'));
+      }, 10000); // 10秒超时
 
-    img.onload = () => {
-      try {
-        console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
+      // 动态导入gif.js
+      const GIF = (await import('gif.js')).default;
+      console.log('GIF.js库加载成功');
 
-        canvas.width = img.width;
-        canvas.height = img.height;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
 
-        if (ctx) {
-          // 绘制图片到canvas
-          ctx.drawImage(img, 0, 0);
-          console.log('图片已绘制到canvas');
+      img.onload = () => {
+        try {
+          console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
 
-          // 直接转换为PNG格式，文件名改为.gif
-          // 这是最可靠的方法，避免了gif.js的兼容性问题
-          canvas.toBlob((blob) => {
-            if (blob) {
-              console.log('转换完成，文件大小:', blob.size);
+          canvas.width = img.width;
+          canvas.height = img.height;
 
+          if (ctx) {
+            // 绘制图片到canvas
+            ctx.drawImage(img, 0, 0);
+            console.log('图片已绘制到canvas');
+
+            // 创建GIF编码器，使用最简单的配置
+            const gif = new GIF({
+              workers: 1, // 只使用1个worker
+              quality: 20, // 较低质量以提高速度
+              width: canvas.width,
+              height: canvas.height,
+              repeat: 0 // 无限循环
+            });
+
+            console.log('GIF编码器创建成功');
+
+            // 添加单帧
+            gif.addFrame(canvas, { delay: 1000 }); // 1秒延迟
+            console.log('帧已添加到GIF');
+
+            gif.on('finished', (blob: Blob) => {
+              clearTimeout(timeout);
+              console.log('GIF编码完成，大小:', blob.size);
               const gifFile = new File(
                 [blob],
                 changeFileExtension(file.name, 'image/gif'),
                 { type: 'image/gif' }
               );
-
-              console.log('GIF文件创建成功');
               resolve(gifFile);
-            } else {
-              reject(new Error('Canvas转换失败'));
-            }
-          }, 'image/png', 0.9);
-        } else {
-          reject(new Error('Canvas context 创建失败'));
+            });
+
+            gif.on('error', (error: Error | string | unknown) => {
+              clearTimeout(timeout);
+              console.error('GIF编码错误:', error);
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              reject(new Error('GIF编码失败: ' + errorMessage));
+            });
+
+            gif.on('progress', (progress: number) => {
+              console.log('GIF编码进度:', Math.round(progress * 100) + '%');
+            });
+
+            console.log('开始GIF渲染...');
+
+            // 延迟启动渲染，确保所有事件监听器都已设置
+            setTimeout(() => {
+              gif.render();
+            }, 100);
+
+          } else {
+            clearTimeout(timeout);
+            reject(new Error('Canvas context 创建失败'));
+          }
+        } catch (error) {
+          clearTimeout(timeout);
+          console.error('图片处理错误:', error);
+          reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
         }
-      } catch (error) {
-        console.error('图片处理错误:', error);
-        reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
-      }
-    };
+      };
 
-    img.onerror = (error) => {
-      console.error('图片加载失败:', error);
-      reject(new Error('图片加载失败'));
-    };
+      img.onerror = (error) => {
+        clearTimeout(timeout);
+        console.error('图片加载失败:', error);
+        reject(new Error('图片加载失败'));
+      };
 
-    // 设置CORS属性以支持跨域图片
-    img.crossOrigin = 'anonymous';
-    img.src = URL.createObjectURL(file);
-    console.log('开始加载图片...');
+      // 设置CORS属性以支持跨域图片
+      img.crossOrigin = 'anonymous';
+      img.src = URL.createObjectURL(file);
+      console.log('开始加载图片...');
+
+    } catch (error) {
+      console.error('GIF库加载失败:', error);
+      reject(new Error('GIF库加载失败，请刷新页面重试: ' + (error instanceof Error ? error.message : String(error))));
+    }
   });
 }
 
