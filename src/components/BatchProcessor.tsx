@@ -92,6 +92,20 @@ export default function BatchProcessor({ onImagesUploaded }: BatchProcessorProps
     
     setImages(prev => [...prev, ...newImages]);
     onImagesUploaded(newImages);
+
+    // 自动滚动到图片列表区域
+    if (newImages.length > 0) {
+      setTimeout(() => {
+        const imageListSection = document.getElementById('batch-image-list');
+        if (imageListSection) {
+          imageListSection.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+            inline: 'nearest'
+          });
+        }
+      }, 100);
+    }
   };
 
   const handleUrlLoad = async () => {
@@ -313,7 +327,7 @@ export default function BatchProcessor({ onImagesUploaded }: BatchProcessorProps
 
       {/* 已上传的图片 */}
       {images.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+        <div id="batch-image-list" className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             已选择图片 ({images.length})
           </h3>
@@ -327,7 +341,8 @@ export default function BatchProcessor({ onImagesUploaded }: BatchProcessorProps
                 />
                 <button
                   onClick={() => removeImage(image.id)}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-lg"
+                  aria-label="删除图片"
                 >
                   <X className="w-3 h-3" />
                 </button>

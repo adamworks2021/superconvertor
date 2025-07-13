@@ -22,6 +22,18 @@ export default function Home() {
 
   const handleImageSelect = (image: ImageFile) => {
     setSelectedImage(image);
+
+    // 自动滚动到已选择图片区域
+    setTimeout(() => {
+      const selectedImageSection = document.getElementById('selected-image-section');
+      if (selectedImageSection) {
+        selectedImageSection.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }
+    }, 100);
   };
 
   const handleToolChange = (toolId: ToolType) => {

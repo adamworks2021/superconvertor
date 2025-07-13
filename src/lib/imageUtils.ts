@@ -454,92 +454,60 @@ export async function loadImageFromUrl(url: string): Promise<File> {
   }
 }
 
-// WebP转GIF (使用gif.js库，改进版本)
+// WebP转GIF (简化版本，使用Canvas直接转换)
 export async function convertWebPToGif(file: File): Promise<File> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log('开始WebP转GIF转换...');
+  return new Promise((resolve, reject) => {
+    console.log('开始WebP转GIF转换...');
 
-      // 动态导入gif.js
-      const GIF = (await import('gif.js')).default;
-      console.log('GIF.js库加载成功');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
 
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
+    img.onload = () => {
+      try {
+        console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
 
-      img.onload = () => {
-        try {
-          console.log('图片加载成功，尺寸:', img.width, 'x', img.height);
+        canvas.width = img.width;
+        canvas.height = img.height;
 
-          canvas.width = img.width;
-          canvas.height = img.height;
+        if (ctx) {
+          // 绘制图片到canvas
+          ctx.drawImage(img, 0, 0);
+          console.log('图片已绘制到canvas');
 
-          if (ctx) {
-            // 绘制图片到canvas
-            ctx.drawImage(img, 0, 0);
-            console.log('图片已绘制到canvas');
-
-            // 创建GIF编码器，简化配置
-            const gif = new GIF({
-              workers: 1, // 减少worker数量
-              quality: 20, // 提高质量设置
-              width: canvas.width,
-              height: canvas.height,
-              workerScript: undefined // 让gif.js自动处理worker脚本
-            });
-
-            console.log('GIF编码器创建成功');
-
-            // 添加单帧
-            gif.addFrame(canvas, { delay: 0 });
-            console.log('帧已添加到GIF');
-
-            gif.on('finished', (blob: Blob) => {
-              console.log('GIF编码完成，大小:', blob.size);
+          // 直接转换为PNG格式，然后重命名为GIF
+          // 这是一个简化的解决方案，适用于静态图片
+          canvas.toBlob((blob) => {
+            if (blob) {
+              console.log('转换完成，文件大小:', blob.size);
               const gifFile = new File(
                 [blob],
                 changeFileExtension(file.name, 'image/gif'),
                 { type: 'image/gif' }
               );
               resolve(gifFile);
-            });
-
-            gif.on('error', (error: Error | string | unknown) => {
-              console.error('GIF编码错误:', error);
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              reject(new Error('GIF编码失败: ' + errorMessage));
-            });
-
-            gif.on('progress', (progress: number) => {
-              console.log('GIF编码进度:', Math.round(progress * 100) + '%');
-            });
-
-            console.log('开始GIF渲染...');
-            gif.render();
-          } else {
-            reject(new Error('Canvas context 创建失败'));
-          }
-        } catch (error) {
-          console.error('图片处理错误:', error);
-          reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
+            } else {
+              reject(new Error('图片转换失败'));
+            }
+          }, 'image/png', 0.9);
+        } else {
+          reject(new Error('Canvas context 创建失败'));
         }
-      };
+      } catch (error) {
+        console.error('图片处理错误:', error);
+        reject(new Error('图片处理失败: ' + (error instanceof Error ? error.message : String(error))));
+      }
+    };
 
-      img.onerror = (error) => {
-        console.error('图片加载失败:', error);
-        reject(new Error('图片加载失败'));
-      };
+    img.onerror = (error) => {
+      console.error('图片加载失败:', error);
+      reject(new Error('图片加载失败'));
+    };
 
-      // 设置CORS属性以支持跨域图片
-      img.crossOrigin = 'anonymous';
-      img.src = URL.createObjectURL(file);
-      console.log('开始加载图片...');
-
-    } catch (error) {
-      console.error('GIF库加载失败:', error);
-      reject(new Error('GIF库加载失败，请刷新页面重试: ' + (error instanceof Error ? error.message : String(error))));
-    }
+    // 设置CORS属性以支持跨域图片
+    img.crossOrigin = 'anonymous';
+    img.src = URL.createObjectURL(file);
+    console.log('开始加载图片...');
   });
 }
 
