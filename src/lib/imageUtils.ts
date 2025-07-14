@@ -545,16 +545,17 @@ async function createAnimatedGif(file: File): Promise<File> {
           loops: anim.loops
         });
 
-        // 创建GIF编码器
+        // 创建GIF编码器（简化配置避免卡顿）
         const gif = new GIF({
-          workers: 2,
-          quality: 10,
+          workers: 1,              // 减少到1个worker
+          quality: 20,             // 降低质量提高速度
           workerScript: '/gif.worker.js',
           width: anim.width,
           height: anim.height,
           repeat: anim.loops === 0 ? 0 : anim.loops, // 0 = 无限循环
           background: '#ffffff',
-          transparent: null
+          transparent: null,
+          debug: true              // 启用调试
         });
 
         console.log('🎨 GIF编码器创建成功');
@@ -595,8 +596,15 @@ async function createAnimatedGif(file: File): Promise<File> {
           console.log(`🎨 已处理第${i + 1}/${anim.frames.length}帧 (延迟: ${frame.duration}ms)`);
         }
 
+        // 设置超时机制（30秒）
+        const timeoutId = setTimeout(() => {
+          console.log('⏰ GIF编码超时，回退到静态转换');
+          convertStaticWebPToGif(file).then(resolve).catch(reject);
+        }, 30000);
+
         // 设置GIF事件监听
         gif.on('finished', (blob: Blob) => {
+          clearTimeout(timeoutId);
           console.log('🎉 真正的动画GIF创建成功!', {
             size: blob.size,
             frames: anim.frames.length,
@@ -614,6 +622,7 @@ async function createAnimatedGif(file: File): Promise<File> {
         });
 
         gif.on('error', (error: any) => {
+          clearTimeout(timeoutId);
           console.error('❌ GIF编码错误:', error);
           convertStaticWebPToGif(file).then(resolve).catch(reject);
         });
