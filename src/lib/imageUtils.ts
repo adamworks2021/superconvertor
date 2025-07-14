@@ -480,11 +480,11 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
 }
 
 // 动态加载WebPXMux库（通过CDN）
-async function loadWebPXMux(): Promise<any> {
+async function loadWebPXMux(): Promise<unknown> {
   return new Promise((resolve, reject) => {
     // 检查是否已经加载
-    if ((window as any).WebPXMux) {
-      resolve((window as any).WebPXMux);
+    if ((window as Record<string, unknown>).WebPXMux) {
+      resolve((window as Record<string, unknown>).WebPXMux);
       return;
     }
 
@@ -492,8 +492,8 @@ async function loadWebPXMux(): Promise<any> {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.min.js';
     script.onload = () => {
-      if ((window as any).WebPXMux) {
-        resolve((window as any).WebPXMux);
+      if ((window as Record<string, unknown>).WebPXMux) {
+        resolve((window as Record<string, unknown>).WebPXMux);
       } else {
         reject(new Error('WebPXMux加载失败'));
       }
@@ -509,7 +509,7 @@ async function createAnimatedGif(file: File): Promise<File> {
 
   try {
     // 动态加载所需库
-    const [WebPXMux, GIF] = await Promise.all([
+    const [WebPXMuxClass, GIF] = await Promise.all([
       loadWebPXMux(),
       import('gif.js').then(m => m.default)
     ]);
@@ -519,7 +519,20 @@ async function createAnimatedGif(file: File): Promise<File> {
     return new Promise(async (resolve, reject) => {
       try {
         // 初始化WebPXMux解码器
-        const xMux = new WebPXMux('https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.wasm');
+        const xMux = new (WebPXMuxClass as new (wasmPath: string) => {
+          ready: Promise<void>;
+          decode: (buffer: ArrayBuffer) => {
+            width: number;
+            height: number;
+            loops: number;
+            frames: Array<{
+              x: number;
+              y: number;
+              duration: number;
+              patch: ImageData;
+            }>;
+          };
+        })('https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.wasm');
         console.log('🔧 WebPXMux解码器创建成功，等待WASM加载...');
 
         await xMux.ready;
@@ -621,7 +634,7 @@ async function createAnimatedGif(file: File): Promise<File> {
           resolve(gifFile);
         });
 
-        gif.on('error', (error: any) => {
+        gif.on('error', (error: Error) => {
           clearTimeout(timeoutId);
           console.error('❌ GIF编码错误:', error);
           convertStaticWebPToGif(file).then(resolve).catch(reject);
@@ -647,28 +660,7 @@ async function createAnimatedGif(file: File): Promise<File> {
   }
 }
 
-// 检查是否为动画WebP
-async function checkIfAnimatedWebP(file: File): Promise<boolean> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const buffer = reader.result as ArrayBuffer;
-      const view = new Uint8Array(buffer);
 
-      // 查找ANIM chunk，表示动画WebP
-      for (let i = 0; i < view.length - 4; i++) {
-        if (view[i] === 0x41 && view[i + 1] === 0x4E &&
-            view[i + 2] === 0x49 && view[i + 3] === 0x4D) {
-          resolve(true);
-          return;
-        }
-      }
-      resolve(false);
-    };
-    reader.onerror = () => resolve(false);
-    reader.readAsArrayBuffer(file);
-  });
-}
 
 
 

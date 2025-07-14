@@ -23,9 +23,9 @@ declare module 'gif.js' {
     addFrame(element: HTMLCanvasElement | HTMLImageElement | CanvasRenderingContext2D, options?: GIFFrameOptions): void;
     render(): void;
     on(event: 'finished', callback: (blob: Blob) => void): void;
-    on(event: 'error', callback: (error: any) => void): void;
+    on(event: 'error', callback: (error: Error) => void): void;
     on(event: 'progress', callback: (progress: number) => void): void;
-    on(event: string, callback: (...args: any[]) => void): void;
+    on(event: string, callback: (...args: unknown[]) => void): void;
     setOptions(options: GIFOptions): void;
   }
 }
