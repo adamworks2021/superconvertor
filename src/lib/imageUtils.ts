@@ -483,8 +483,9 @@ async function isAnimatedWebP(file: File): Promise<boolean> {
 async function loadWebPXMux(): Promise<unknown> {
   return new Promise((resolve, reject) => {
     // 检查是否已经加载
-    if ((window as Record<string, unknown>).WebPXMux) {
-      resolve((window as Record<string, unknown>).WebPXMux);
+    const globalWindow = window as unknown as Record<string, unknown>;
+    if (globalWindow.WebPXMux) {
+      resolve(globalWindow.WebPXMux);
       return;
     }
 
@@ -492,8 +493,9 @@ async function loadWebPXMux(): Promise<unknown> {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/webpxmux@1.0.0/dist/webpxmux.min.js';
     script.onload = () => {
-      if ((window as Record<string, unknown>).WebPXMux) {
-        resolve((window as Record<string, unknown>).WebPXMux);
+      const globalWindow = window as unknown as Record<string, unknown>;
+      if (globalWindow.WebPXMux) {
+        resolve(globalWindow.WebPXMux);
       } else {
         reject(new Error('WebPXMux加载失败'));
       }
